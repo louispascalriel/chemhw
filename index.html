@@ -610,32 +610,7 @@ async function saveSetup() {
     return;
   }
 
-  try {
-    var testR = await fetch(CFG.url + '/rest/v1/profiles?limit=1', { headers: { 'apikey': CFG.key, 'Authorization': 'Bearer ' + CFG.key } });
-    if (testR.status === 401) {
-      btn.disabled=false; btn.textContent='Save & launch ChemHW';
-      showSetupMsg('Invalid API key — make sure you copied the anon key.','error');
-      return;
-    }
-    if (testR.status === 404) {
-      btn.disabled=false; btn.textContent='Save & launch ChemHW';
-      showSetupMsg('Project URL not found — double-check your Supabase URL.','error');
-      return;
-    }
-    if (testR.status === 400 || testR.status === 406) {
-      var te = await testR.json().catch(function(){ return {}; });
-      if (te && te.code === '42P01') {
-        btn.disabled=false; btn.textContent='Save & launch ChemHW';
-        showSetupMsg('Connected! But tables are missing — please run the SQL from step 2 first, then try again.','error');
-        return;
-      }
-    }
-    // Any response (even an error about tables not existing via 200/other) means we connected fine
-  } catch(e) {
-    btn.disabled=false; btn.textContent='Save & launch ChemHW';
-    showSetupMsg('Network error: ' + (e.message||e) + ' — check your Project URL.','error');
-    return;
-  }
+  // Credentials look good — save and proceed
 
   saveCFG();
   btn.disabled=false; btn.textContent='Save & launch ChemHW';

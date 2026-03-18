@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChemHW</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --surface2: #f0ede6;
+  --border: #e2ddd6;
+  --border2: #ccc7be;
+  --text: #1a1916;
+  --text2: #5a564f;
+  --text3: #9b9690;
+  --accent: #2d5a8e;
+  --accent-light: #e8f0f9;
+  --accent-dark: #1e3f64;
+  --green: #2d6e4e;
+  --green-light: #e6f4ec;
+  --red: #8e2d2d;
+  --red-light: #f4e6e6;
+  --amber: #7a5c1e;
+  --amber-light: #fdf3dc;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.6; }
+
+/* ── AUTH SCREEN ── */
+.auth-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 2rem; width: 100%; max-width: 420px; box-shadow: var(--shadow); }
+.auth-logo { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--accent); margin-bottom: 0.25rem; }
+.auth-sub { font-size: 13px; color: var(--text3); margin-bottom: 1.5rem; }
+.auth-tabs { display: flex; gap: 0; border: 1px solid var(--border2); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.5rem; }
+.auth-tab { flex: 1; padding: 8px; font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; background: var(--bg); color: var(--text2); border: none; font-family: 'Outfit',sans-serif; transition: all 0.15s; }
+.auth-tab.active { background: var(--accent); color: #fff; }
+.form-group { margin-bottom: 13px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text2); margin-bottom: 5px; }
+.form-input { width: 100%; padding: 9px 12px; font-size: 14px; font-family: 'Outfit',sans-serif; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); transition: border-color 0.15s; }
+.form-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45,90,142,0.1); }
+.form-input.mono { font-family: 'DM Mono', monospace; letter-spacing: 0.1em; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; font-size: 14px; font-weight: 500; font-family: 'Outfit',sans-serif; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; transition: all 0.15s; white-space: nowrap; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); width: 100%; margin-top: 4px; }
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border2); }
+.btn-secondary:hover { background: var(--surface2); }
+.btn-danger { background: var(--red-light); color: var(--red); border-color: #e8c0c0; }
+.btn-danger:hover { background: #ead0d0; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-xs { padding: 3px 9px; font-size: 11px; }
+.auth-msg { font-size: 13px; padding: 9px 12px; border-radius: var(--radius); margin-top: 10px; display: none; }
+.auth-msg.error { background: var(--red-light); color: var(--red); border: 1px solid #e8c0c0; display: block; }
+.auth-msg.success { background: var(--green-light); color: var(--green); border: 1px solid #b3dcc4; display: block; }
+
+/* ── SETUP BANNER ── */
+.setup-banner { background: var(--amber-light); border: 1px solid #e8d8a0; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 1.5rem; font-size: 13px; color: var(--amber); }
+.setup-banner strong { display: block; margin-bottom: 4px; font-size: 14px; }
+.setup-banner code { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 12px; }
+
+/* ── APP SHELL ── */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 1.5rem 0; flex-shrink: 0; display: flex; flex-direction: column; }
+.main { flex: 1; overflow-y: auto; }
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0.85rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-size: 15px; font-weight: 500; }
+.user-pill { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; padding: 4px 12px 4px 6px; font-size: 13px; }
+.user-avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.content { padding: 2rem; max-width: 860px; }
+.logo { padding: 0 1.25rem 1.25rem; border-bottom: 1px solid var(--border); margin-bottom: 1rem; }
+.logo-title { font-family: 'DM Serif Display', serif; font-size: 22px; color: var(--accent); }
+.logo-sub { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+.nav-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); padding: 1rem 1.25rem 0.4rem; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 1.25rem; font-size: 14px; color: var(--text2); cursor: pointer; border-left: 2px solid transparent; transition: all 0.15s; }
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-light); font-weight: 500; }
+.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.sidebar-footer { margin-top: auto; padding: 1rem 1.25rem 0; border-top: 1px solid var(--border); }
+.sidebar-footer p { font-size: 11px; color: var(--text3); line-height: 1.5; }
+
+/* ── PANELS ── */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ── CARDS ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; flex-wrap: wrap; gap: 8px; }
+.card-title { font-family: 'DM Serif Display', serif; font-size: 20px; }
+
+/* ── SCORE GRID ── */
+.score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.score-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; text-align: center; }
+.score-val { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); line-height: 1; }
+.score-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-top: 4px; }
+
+/* ── BADGES ── */
+.badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px; }
+.badge-formula { background: var(--accent-light); color: var(--accent); }
+.badge-sci { background: var(--green-light); color: var(--green); }
+.badge-mc { background: #f0e8f8; color: #5a2d82; }
+.badge-calc { background: var(--amber-light); color: var(--amber); }
+.badge-teacher { background: #fff3cd; color: #856404; }
+.badge-student { background: var(--accent-light); color: var(--accent); }
+
+/* ── STUDENT Q CARDS ── */
+.q-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+.q-card.locked { opacity: 0.65; }
+.q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px; }
+.q-num { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); }
+.q-text { font-size: 15px; color: var(--text); margin: 8px 0 1rem; line-height: 1.65; }
+.q-figure img { max-width: 100%; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 6px; }
+.fig-caption { font-size: 12px; color: var(--text3); font-style: italic; margin-bottom: 1rem; }
+.q-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 1rem; }
+.q-table th { background: var(--surface2); padding: 7px 12px; text-align: left; font-weight: 600; border: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text2); }
+.q-table td { padding: 7px 12px; border: 1px solid var(--border); }
+.q-table tr:nth-child(even) td { background: var(--bg); }
+.attempt-status { font-size: 12px; font-weight: 500; }
+.attempt-status.ok { color: var(--text3); }
+.attempt-status.warn { color: var(--amber); }
+.attempt-status.danger { color: var(--red); }
+.attempt-status.solved { color: var(--green); }
+.prog-track { height: 3px; background: var(--border); border-radius: 2px; margin: 10px 0 6px; }
+.prog-fill { height: 3px; border-radius: 2px; background: var(--accent); transition: width 0.3s, background 0.3s; }
+.student-input { width: 100%; padding: 9px 12px; font-size: 15px; font-family: 'DM Mono', monospace; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); transition: border-color 0.15s; }
+.student-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45,90,142,0.1); }
+.student-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.preview-render { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; font-size: 16px; min-height: 40px; color: var(--text); display: flex; align-items: center; margin-top: 6px; }
+.sci-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+.sci-input { width: 110px; padding: 9px 10px; font-size: 15px; font-family: 'DM Mono', monospace; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+.sci-input:focus { outline: none; border-color: var(--accent); }
+.sci-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.sci-sep { font-size: 15px; color: var(--text2); }
+.mc-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
+.mc-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border: 1px solid var(--border2); border-radius: var(--radius); cursor: pointer; transition: all 0.15s; }
+.mc-option:hover { border-color: var(--accent); background: var(--accent-light); }
+.mc-option.selected { border-color: var(--accent); background: var(--accent-light); }
+.mc-option.correct-opt { border-color: var(--green); background: var(--green-light); }
+.mc-option.wrong-opt { border-color: var(--red); background: var(--red-light); }
+.mc-option.disabled { pointer-events: none; }
+.mc-letter { width: 22px; height: 22px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--text2); flex-shrink: 0; margin-top: 2px; }
+.tol-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; flex-wrap: wrap; }
+.tol-row label { font-size: 13px; color: var(--text2); }
+.tol-row input[type=range] { width: 110px; }
+.tol-val { font-size: 13px; font-weight: 500; min-width: 38px; }
+.result-msg { margin-top: 10px; padding: 9px 13px; border-radius: var(--radius); font-size: 14px; display: none; }
+.result-msg.correct { background: var(--green-light); color: var(--green); border: 1px solid #b3dcc4; display: block; }
+.result-msg.incorrect { background: var(--red-light); color: var(--red); border: 1px solid #e8c0c0; display: block; }
+.result-msg.partial { background: var(--amber-light); color: var(--amber); border: 1px solid #e8d8a0; display: block; }
+.result-msg.exhausted { background: var(--red-light); color: var(--red); border: 1px solid #e8c0c0; display: block; }
+.hint { font-size: 12px; color: var(--text3); margin-top: 5px; }
+
+/* ── SETTINGS BAR ── */
+.settings-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 12px; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.settings-bar label { font-size: 13px; color: var(--text2); }
+.settings-input { width: 72px; padding: 5px 9px; font-size: 14px; font-family: 'Outfit',sans-serif; border: 1px solid var(--border2); border-radius: 7px; background: var(--bg); color: var(--text); text-align: center; }
+.settings-input:focus { outline: none; border-color: var(--accent); }
+.unlim-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); cursor: pointer; }
+
+/* ── BUILDER ── */
+.type-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 1rem; }
+.type-tab { padding: 6px 14px; font-size: 13px; font-weight: 500; border: 1px solid var(--border2); border-radius: 99px; cursor: pointer; background: var(--surface); color: var(--text2); transition: all 0.15s; }
+.type-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form-row .form-group { flex: 1; min-width: 100px; }
+.form-textarea { width: 100%; padding: 8px 11px; font-size: 14px; font-family: 'Outfit',sans-serif; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); resize: vertical; min-height: 68px; line-height: 1.5; }
+.form-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(45,90,142,0.1); }
+.form-select { width: 100%; padding: 8px 11px; font-size: 14px; font-family: 'Outfit',sans-serif; border: 1px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+.uploader { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 1.25rem; text-align: center; cursor: pointer; transition: border-color 0.15s; }
+.uploader:hover { border-color: var(--accent); }
+.uploader p { font-size: 13px; color: var(--text3); }
+.img-preview { max-width: 100%; border-radius: var(--radius); border: 1px solid var(--border); margin-top: 8px; }
+.table-builder table { width: 100%; border-collapse: collapse; }
+.table-builder th, .table-builder td { border: 1px solid var(--border); }
+.table-builder th input, .table-builder td input { width: 100%; padding: 6px 8px; font-size: 13px; border: none; background: transparent; color: var(--text); font-family: 'Outfit',sans-serif; }
+.table-builder th { background: var(--surface2); }
+.mc-builder-option { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.bank-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
+.bank-item-body { flex: 1; min-width: 0; }
+.bank-item-q { font-size: 14px; color: var(--text); margin-bottom: 3px; }
+.bank-item-meta { font-size: 12px; color: var(--text3); }
+.bank-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; align-items: flex-start; }
+.answer-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; min-height: 32px; }
+.answer-tag { display: flex; align-items: center; gap: 5px; background: var(--accent-light); color: var(--accent); border: 1px solid #b5d0ef; border-radius: 99px; padding: 3px 10px; font-size: 13px; font-family: 'DM Mono', monospace; }
+.answer-tag button { background: none; border: none; cursor: pointer; color: var(--accent); font-size: 14px; line-height: 1; }
+.add-answer-row { display: flex; gap: 8px; }
+
+/* ── TEACHER DASHBOARD ── */
+.dash-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.dash-table th { background: var(--surface2); padding: 9px 14px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); border-bottom: 1px solid var(--border); }
+.dash-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); }
+.dash-table tr:last-child td { border-bottom: none; }
+.dash-table tr:hover td { background: var(--surface2); }
+.pct-bar-wrap { display: flex; align-items: center; gap: 8px; }
+.pct-bar { height: 6px; background: var(--border); border-radius: 3px; flex: 1; min-width: 60px; }
+.pct-fill { height: 6px; border-radius: 3px; background: var(--accent); transition: width 0.3s; }
+.missed-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.missed-chip { background: var(--red-light); color: var(--red); font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid #e8c0c0; }
+.class-code-box { display: inline-flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 8px 14px; font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 1rem; }
+
+/* ── MODAL ── */
+.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; }
+.modal-backdrop.open { display: flex; }
+.modal { background: var(--surface); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 480px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.15); }
+.modal-title { font-family: 'DM Serif Display', serif; font-size: 20px; margin-bottom: 0.5rem; }
+.modal-footer { display: flex; gap: 8px; margin-top: 1rem; justify-content: flex-end; }
+
+/* ── MISC ── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 14px; }
+.loading { text-align: center; padding: 2rem; color: var(--text3); font-size: 14px; }
+sup { font-size: 0.72em; }
+sub { font-size: 0.72em; }
+@media (max-width: 640px) { .sidebar { display: none; } .content { padding: 1rem; } .topbar { padding: 0.75rem 1rem; } }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SETUP REQUIRED SCREEN (shown if not configured)
+════════════════════════════════════════════ -->
+<div id="setup-screen" style="display:none; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:2rem;max-width:560px;width:100%;box-shadow:var(--shadow);">
+    <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--accent);margin-bottom:0.25rem;">ChemHW Setup</div>
+    <div style="font-size:13px;color:var(--text3);margin-bottom:1.5rem;">Connect your Supabase database — takes about 5 minutes</div>
+
+    <div style="counter-reset:steps;">
+      <div style="display:flex;gap:12px;margin-bottom:1.25rem;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">1</div>
+        <div><strong style="font-size:14px;">Create a free Supabase project</strong><br><span style="font-size:13px;color:var(--text2);">Go to <a href="https://supabase.com" target="_blank" style="color:var(--accent);">supabase.com</a>, sign up, and create a new project. Wait for it to finish provisioning (~2 min).</span></div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:1.25rem;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">2</div>
+        <div><strong style="font-size:14px;">Run this SQL in the Supabase SQL editor</strong><br><span style="font-size:13px;color:var(--text2);">Go to <em>Project → SQL Editor</em> and paste + run this:</span>
+          <pre id="setup-sql" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'DM Mono',monospace;margin-top:8px;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--text);">create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  username text unique not null,
+  role text not null default 'student',
+  class_code text,
+  created_at timestamptz default now()
+);
+create table if not exists student_results (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid references profiles(id) on delete cascade,
+  question_id int not null,
+  question_text text,
+  correct boolean not null,
+  attempts_used int not null default 1,
+  answered_at timestamptz default now()
+);
+alter table profiles enable row level security;
+alter table student_results enable row level security;
+create policy "Users read own profile" on profiles for select using (auth.uid() = id);
+create policy "Users update own profile" on profiles for update using (auth.uid() = id);
+create policy "Teachers read all profiles" on profiles for select using (true);
+create policy "Users read own results" on student_results for select using (auth.uid() = student_id);
+create policy "Users insert own results" on student_results for insert with check (auth.uid() = student_id);
+create policy "Teachers read all results" on student_results for select using (true);</pre>
+          <button class="btn btn-secondary btn-sm" onclick="copySQL()" style="margin-top:6px;">Copy SQL</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-bottom:1.25rem;">
+        <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">3</div>
+        <div style="flex:1;"><strong style="font-size:14px;">Paste your Supabase credentials below</strong><br><span style="font-size:13px;color:var(--text2);">Find these under <em>Project Settings → API</em>.</span>
+          <div style="margin-top:10px;">
+            <div class="form-group"><label class="form-label">Project URL</label><input class="form-input" id="setup-url" placeholder="https://xxxx.supabase.co"></div>
+            <div class="form-group"><label class="form-label">Anon / public key</label><input class="form-input" id="setup-key" placeholder="eyJhbGci..."></div>
+            <div class="form-group"><label class="form-label">Your teacher class code <span style="font-weight:400;text-transform:none;font-size:11px;">(students enter this to register)</span></label><input class="form-input mono" id="setup-code" placeholder="e.g. CHEM101" style="text-transform:uppercase;"></div>
+          </div>
+          <button class="btn btn-primary" onclick="saveSetup()" style="width:auto;margin-top:4px;">Save &amp; launch ChemHW</button>
+          <div class="auth-msg" id="setup-msg"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     AUTH SCREEN
+════════════════════════════════════════════ -->
+<div id="auth-screen" style="display:none;">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-logo">ChemHW</div>
+      <div class="auth-sub">Chemistry Homework System</div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Sign in</button>
+        <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <!-- Login -->
+      <div id="auth-login">
+        <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="login-user" placeholder="your username" autocomplete="username"></div>
+        <div class="form-group"><label class="form-label">Password</label><input class="form-input" type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
+        <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Sign in</button>
+        <div class="auth-msg" id="login-msg"></div>
+      </div>
+
+      <!-- Register -->
+      <div id="auth-register" style="display:none;">
+        <div class="form-group"><label class="form-label">Class code</label><input class="form-input mono" id="reg-code" placeholder="e.g. CHEM101" style="text-transform:uppercase;"></div>
+        <div class="form-group"><label class="form-label">Choose a username</label><input class="form-input" id="reg-user" placeholder="e.g. jsmith" autocomplete="username"></div>
+        <div class="form-group"><label class="form-label">Password</label><input class="form-input" type="password" id="reg-pass" placeholder="At least 6 characters" autocomplete="new-password"></div>
+        <div class="form-group"><label class="form-label">Confirm password</label><input class="form-input" type="password" id="reg-pass2" placeholder="Repeat password" autocomplete="new-password"></div>
+        <button class="btn btn-primary" onclick="doRegister()" id="reg-btn">Create account</button>
+        <div class="auth-msg" id="reg-msg"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════ -->
+<div id="app-screen" style="display:none;">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-title">ChemHW</div>
+        <div class="logo-sub">Chemistry Homework</div>
+      </div>
+      <div class="nav-section">Student</div>
+      <div class="nav-item active" id="nav-questions" onclick="showPanel('questions',this)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
+        Questions
+      </div>
+      <div id="teacher-nav" style="display:none;">
+        <div class="nav-section">Teacher</div>
+        <div class="nav-item" id="nav-dashboard" onclick="showPanel('dashboard',this)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="8" width="4" height="7" rx="1"/><rect x="6" y="5" width="4" height="10" rx="1"/><rect x="11" y="2" width="4" height="13" rx="1"/></svg>
+          Student results
+        </div>
+        <div class="nav-item" id="nav-builder" onclick="showPanel('builder',this)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M2 8h12"/></svg>
+          Question builder
+        </div>
+        <div class="nav-item" id="nav-settings" onclick="showPanel('settings',this)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
+          Settings
+        </div>
+      </div>
+      <div class="sidebar-footer"><p id="sidebar-role-note"></p></div>
+    </aside>
+
+    <div class="main">
+      <div class="topbar">
+        <span class="topbar-title" id="topbar-title">Questions</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="user-pill">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <span id="user-display-name" style="font-size:13px;"></span>
+            <span class="badge" id="user-role-badge" style="font-size:10px;"></span>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="doLogout()">Sign out</button>
+        </div>
+      </div>
+
+      <div class="content">
+
+        <!-- QUESTIONS PANEL -->
+        <div id="panel-questions" class="panel active">
+          <div class="score-grid">
+            <div class="score-card"><div class="score-val" id="sc-correct">0</div><div class="score-lbl">Correct</div></div>
+            <div class="score-card"><div class="score-val" id="sc-attempts">0</div><div class="score-lbl">Attempts</div></div>
+            <div class="score-card"><div class="score-val" id="sc-pct">—</div><div class="score-lbl">Score</div></div>
+            <div class="score-card"><div class="score-val" id="sc-left">—</div><div class="score-lbl">Remaining</div></div>
+          </div>
+          <div id="student-questions"></div>
+        </div>
+
+        <!-- DASHBOARD PANEL -->
+        <div id="panel-dashboard" class="panel">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Class results</div>
+              <button class="btn btn-secondary btn-sm" onclick="loadDashboard()">Refresh</button>
+            </div>
+            <div style="margin-bottom:1rem;">
+              <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Your class code — share this with students:</div>
+              <div class="class-code-box" id="dash-class-code">—</div>
+            </div>
+            <div id="dashboard-content"><div class="loading">Loading results…</div></div>
+          </div>
+        </div>
+
+        <!-- BUILDER PANEL -->
+        <div id="panel-builder" class="panel">
+          <div class="card">
+            <div class="card-header"><div class="card-title">Add question</div></div>
+            <div class="type-tabs">
+              <div class="type-tab active" id="tt-formula" onclick="setBuilderType('formula')">Formula</div>
+              <div class="type-tab" id="tt-sci" onclick="setBuilderType('sci')">Scientific notation</div>
+              <div class="type-tab" id="tt-mc" onclick="setBuilderType('mc')">Multiple choice</div>
+              <div class="type-tab" id="tt-calc" onclick="setBuilderType('calc')">Calculation</div>
+            </div>
+            <div class="form-group"><label class="form-label">Question text</label><textarea class="form-textarea" id="b-qtext" placeholder="Enter the question…"></textarea></div>
+            <div class="form-group">
+              <label class="form-label">Attach image (optional)</label>
+              <div class="uploader" onclick="document.getElementById('b-img-file').click()"><p>Click to upload PNG / JPG</p><input type="file" id="b-img-file" accept="image/*" style="display:none" onchange="handleImageUpload(event)"></div>
+              <div id="b-img-wrap" style="display:none;margin-top:8px;"><img id="b-img-preview" class="img-preview"><div style="display:flex;gap:8px;align-items:center;margin-top:6px;"><input class="form-input" id="b-img-caption" placeholder="Caption (optional)" style="max-width:300px;font-size:13px;"><button class="btn btn-danger btn-sm" onclick="clearImage()">Remove</button></div></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Attach data table (optional)</label>
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                <input class="form-input" id="tbl-rows" type="number" min="1" max="10" value="2" style="width:65px;">
+                <span style="font-size:13px;color:var(--text2);">rows</span>
+                <input class="form-input" id="tbl-cols" type="number" min="1" max="6" value="2" style="width:65px;">
+                <span style="font-size:13px;color:var(--text2);">cols</span>
+                <button class="btn btn-secondary btn-sm" onclick="genTable()">Generate</button>
+                <button class="btn btn-danger btn-sm" onclick="clearTable()">Clear</button>
+              </div>
+              <div id="b-table-builder" class="table-builder"></div>
+            </div>
+            <!-- Formula -->
+            <div id="b-fields-formula">
+              <div class="form-group"><label class="form-label">Correct answer(s) — comma-separated for alternatives</label><input class="form-input" id="b-formula-ans" placeholder="e.g. H2O, HOH" oninput="previewAns()" style="font-family:'DM Mono',monospace;"></div>
+              <div class="form-group"><label class="form-label">Live preview</label><div class="preview-render" id="b-formula-preview"></div></div>
+              <div class="form-group"><label class="form-label">Hint (optional)</label><input class="form-input" id="b-formula-hint" placeholder="e.g. Use ^ for charges"></div>
+            </div>
+            <!-- Sci -->
+            <div id="b-fields-sci" style="display:none;">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Coefficient</label><input class="form-input" id="b-sci-coeff" type="number" step="any" placeholder="6.022" style="font-family:'DM Mono',monospace;"></div>
+                <div class="form-group"><label class="form-label">Exponent</label><input class="form-input" id="b-sci-exp" type="number" step="1" placeholder="23" style="font-family:'DM Mono',monospace;"></div>
+                <div class="form-group"><label class="form-label">Tolerance %</label><input class="form-input" id="b-sci-tol" type="number" step="0.1" min="0.1" value="1" placeholder="1"></div>
+              </div>
+              <div class="form-group"><label class="form-label">Hint (optional)</label><input class="form-input" id="b-sci-hint" placeholder="Hint for students"></div>
+            </div>
+            <!-- MC -->
+            <div id="b-fields-mc" style="display:none;">
+              <div class="form-group"><label class="form-label">Options — select the radio button next to the correct answer</label><div id="mc-options-builder"></div><button class="btn btn-secondary btn-sm" onclick="addMCOpt()" style="margin-top:6px;">+ Add option</button></div>
+              <div class="form-group"><label class="form-label">Explanation (shown after correct answer, optional)</label><textarea class="form-textarea" id="b-mc-explain" placeholder="Why is this the correct answer?"></textarea></div>
+            </div>
+            <!-- Calc -->
+            <div id="b-fields-calc" style="display:none;">
+              <div class="form-row">
+                <div class="form-group"><label class="form-label">Correct value</label><input class="form-input" id="b-calc-val" type="number" step="any" placeholder="58.44" style="font-family:'DM Mono',monospace;"></div>
+                <div class="form-group"><label class="form-label">Unit (optional)</label><input class="form-input" id="b-calc-unit" placeholder="g/mol"></div>
+                <div class="form-group"><label class="form-label">Tolerance %</label><input class="form-input" id="b-calc-tol" type="number" step="0.1" min="0" value="2" placeholder="2"></div>
+              </div>
+              <div class="form-group"><label class="form-label">Hint (optional)</label><input class="form-input" id="b-calc-hint" placeholder="Hint for students"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
+              <button class="btn btn-primary" style="width:auto;" onclick="addQuestion()">Add to question bank</button>
+              <span id="b-note" style="font-size:13px;color:var(--text3);"></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><div class="card-title">Question bank</div><span style="font-size:13px;color:var(--text3);" id="bank-count">0 questions</span></div>
+            <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="exportQ()">Export questions</button>
+              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">Import questions</button>
+              <input type="file" id="import-file" accept=".json" style="display:none" onchange="importQ(event)">
+            </div>
+            <div id="bank-list"></div>
+          </div>
+        </div>
+
+        <!-- SETTINGS PANEL -->
+        <div id="panel-settings" class="panel">
+          <div class="card">
+            <div class="card-title" style="margin-bottom:1rem;">Attempt settings</div>
+            <div class="settings-bar" style="margin:0;">
+              <label>Max attempts per question:</label>
+              <input class="settings-input" id="max-input" type="number" min="1" max="999" value="3">
+              <label class="unlim-label"><input type="checkbox" id="unlim-chk" onchange="toggleUnlim(this)"> Unlimited</label>
+              <button class="btn btn-primary btn-sm" onclick="applySettings()">Apply &amp; reset</button>
+              <span style="font-size:12px;color:var(--text3);" id="settings-note"></span>
+            </div>
+          </div>
+          <div class="card" style="margin-top:1rem;">
+            <div class="card-title" style="margin-bottom:0.5rem;">Deployment</div>
+            <p style="font-size:14px;color:var(--text2);line-height:1.7;">To share this with students, upload <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">chemistry-hw.html</code> to <a href="https://vercel.com" target="_blank" style="color:var(--accent);">Vercel</a> or <a href="https://netlify.com" target="_blank" style="color:var(--accent);">Netlify</a> — both are free and take under 2 minutes. Students visit the URL, register with your class code, and their results are saved to Supabase automatically.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit answers modal -->
+<div class="modal-backdrop" id="edit-modal">
+  <div class="modal">
+    <div class="modal-title">Edit accepted answers</div>
+    <p id="edit-modal-q" style="font-size:13px;color:var(--text2);margin-bottom:12px;"></p>
+    <div class="form-label" style="margin-bottom:6px;">Accepted answers</div>
+    <div class="answer-tag-list" id="edit-tags"></div>
+    <div class="add-answer-row">
+      <input class="form-input" id="edit-new-ans" placeholder="Type and press Add" style="font-size:13px;font-family:'DM Mono',monospace;">
+      <button class="btn btn-primary btn-sm" onclick="addEditAns()">Add</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveEditModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG  —  filled on setup or from localStorage
+// ══════════════════════════════════════════
+var CFG = { url:'', key:'', classCode:'' };
+var supabase = null;
+var currentUser = null;
+var currentProfile = null;
+
+function loadCFG() {
+  try { var s = localStorage.getItem('chemhw_cfg'); if(s) CFG = JSON.parse(s); } catch(e){}
+}
+function saveCFG() { localStorage.setItem('chemhw_cfg', JSON.stringify(CFG)); }
+
+function initSupabase() {
+  if (!CFG.url || !CFG.key) return false;
+  try { if (!window.supabase) { console.error('Supabase library not loaded'); return false; } supabase = window.supabase.createClient(CFG.url, CFG.key); return true; }
+  catch(e) { return false; }
+}
+
+// ══════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════
+async function boot() {
+  loadCFG();
+  if (!CFG.url || !CFG.key) { showScreen('setup'); return; }
+  if (!initSupabase()) { showScreen('setup'); return; }
+  var { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    await loadProfile(session.user);
+    showApp();
+  } else {
+    showScreen('auth');
+  }
+}
+
+function showScreen(name) {
+  document.getElementById('setup-screen').style.display = name==='setup' ? 'flex' : 'none';
+  document.getElementById('auth-screen').style.display  = name==='auth'  ? 'block' : 'none';
+  document.getElementById('app-screen').style.display   = name==='app'   ? 'block' : 'none';
+}
+
+// ══════════════════════════════════════════
+//  SETUP
+// ══════════════════════════════════════════
+function copySQL() {
+  var el = document.getElementById('setup-sql');
+  navigator.clipboard.writeText(el.textContent).then(function(){ showSetupMsg('SQL copied to clipboard!','success'); }).catch(function(){ showSetupMsg('Copy failed — please copy manually.','error'); });
+}
+function showSetupMsg(msg, type) {
+  var el = document.getElementById('setup-msg');
+  el.textContent = msg; el.className = 'auth-msg '+type;
+  setTimeout(function(){ el.className='auth-msg'; },4000);
+}
+async function saveSetup() {
+  var url  = document.getElementById('setup-url').value.trim().replace(/\/$/, '');
+  var key  = document.getElementById('setup-key').value.trim();
+  var code = document.getElementById('setup-code').value.trim().toUpperCase();
+
+  if (!url || !key || !code) { showSetupMsg('Please fill in all three fields.','error'); return; }
+  if (!url.startsWith('https://')) { showSetupMsg('URL must start with https://','error'); return; }
+  if (!url.includes('supabase.co')) { showSetupMsg('URL does not look like a Supabase URL — check you copied it correctly.','error'); return; }
+  if (!key.startsWith('eyJ')) { showSetupMsg('Anon key should start with "eyJ" — make sure you copied the full key.','error'); return; }
+  if (key.length < 100) { showSetupMsg('Anon key looks too short — make sure you copied the entire key.','error'); return; }
+
+  var btn = document.querySelector('[onclick="saveSetup()"]');
+  btn.disabled = true; btn.textContent = 'Testing connection…';
+  showSetupMsg('Connecting to Supabase…', 'success');
+
+  CFG = { url, key, classCode: code };
+  if (!initSupabase()) { 
+    btn.disabled=false; btn.textContent='Save & launch ChemHW';
+    showSetupMsg(!window.supabase ? 'Supabase library failed to load — check your internet connection and reload the page.' : 'Could not initialise Supabase client — double-check your URL and key.','error'); 
+    return; 
+  }
+
+  try {
+    var { error } = await supabase.from('profiles').select('id').limit(1);
+    if (error && error.code === '42P01') {
+      btn.disabled=false; btn.textContent='Save & launch ChemHW';
+      showSetupMsg('Connected! But the database tables are missing — please run the SQL from step 2 first, then try again.','error');
+      return;
+    }
+    if (error && error.message && error.message.toLowerCase().includes('invalid')) {
+      btn.disabled=false; btn.textContent='Save & launch ChemHW';
+      showSetupMsg('Invalid API key — make sure you copied the anon key, not the service_role key.','error');
+      return;
+    }
+  } catch(e) {
+    btn.disabled=false; btn.textContent='Save & launch ChemHW';
+    showSetupMsg('Network error: ' + (e.message||e) + ' — check your Project URL is correct.','error');
+    return;
+  }
+
+  saveCFG();
+  btn.disabled=false; btn.textContent='Save & launch ChemHW';
+  showSetupMsg('Connected successfully! Loading…','success');
+  setTimeout(function(){ showScreen('auth'); }, 800);
+}
+
+// ══════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').className    = 'auth-tab'+(tab==='login'?' active':'');
+  document.getElementById('tab-register').className = 'auth-tab'+(tab==='register'?' active':'');
+  document.getElementById('auth-login').style.display    = tab==='login'    ? '' : 'none';
+  document.getElementById('auth-register').style.display = tab==='register' ? '' : 'none';
+}
+
+function showAuthMsg(id, msg, type) {
+  var el=document.getElementById(id); el.textContent=msg; el.className='auth-msg '+type;
+}
+
+async function doLogin() {
+  var username = document.getElementById('login-user').value.trim().toLowerCase();
+  var pass     = document.getElementById('login-pass').value;
+  if (!username||!pass) { showAuthMsg('login-msg','Please fill in all fields.','error'); return; }
+  var btn = document.getElementById('login-btn');
+  btn.disabled=true; btn.textContent='Signing in…';
+  var email = username+'@chemhw.local';
+  var { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+  btn.disabled=false; btn.textContent='Sign in';
+  if (error) { showAuthMsg('login-msg', error.message==='Invalid login credentials'?'Username or password incorrect.':error.message, 'error'); return; }
+  await loadProfile(data.user);
+  showApp();
+}
+
+async function doRegister() {
+  var code  = document.getElementById('reg-code').value.trim().toUpperCase();
+  var uname = document.getElementById('reg-user').value.trim().toLowerCase();
+  var pass  = document.getElementById('reg-pass').value;
+  var pass2 = document.getElementById('reg-pass2').value;
+  if (!code||!uname||!pass||!pass2) { showAuthMsg('reg-msg','Please fill in all fields.','error'); return; }
+  if (pass!==pass2) { showAuthMsg('reg-msg','Passwords do not match.','error'); return; }
+  if (pass.length<6) { showAuthMsg('reg-msg','Password must be at least 6 characters.','error'); return; }
+  if (code!==CFG.classCode) { showAuthMsg('reg-msg','Invalid class code. Ask your teacher for the correct code.','error'); return; }
+  var btn=document.getElementById('reg-btn'); btn.disabled=true; btn.textContent='Creating account…';
+  var email = uname+'@chemhw.local';
+  var { data, error } = await supabase.auth.signUp({ email, password: pass });
+  if (error) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg',error.message,'error'); return; }
+  var role = (uname==='teacher'||uname==='admin')?'teacher':'student';
+  var { error: pe } = await supabase.from('profiles').insert({ id: data.user.id, username: uname, role, class_code: code });
+  btn.disabled=false; btn.textContent='Create account';
+  if (pe) { showAuthMsg('reg-msg','Account created but profile failed: '+pe.message,'error'); return; }
+  showAuthMsg('reg-msg','Account created! Signing you in…','success');
+  await doLogin();
+}
+
+async function loadProfile(user) {
+  currentUser = user;
+  var { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  currentProfile = data;
+}
+
+async function doLogout() {
+  await supabase.auth.signOut();
+  currentUser=null; currentProfile=null;
+  showScreen('auth');
+}
+
+// ══════════════════════════════════════════
+//  APP BOOTSTRAP
+// ══════════════════════════════════════════
+function showApp() {
+  showScreen('app');
+  var isTeacher = currentProfile && currentProfile.role==='teacher';
+  document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
+  var uname = currentProfile ? currentProfile.username : (currentUser ? currentUser.email : '?');
+  var initials = uname.substring(0,2).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('user-display-name').textContent = uname;
+  var rb = document.getElementById('user-role-badge');
+  if (isTeacher) { rb.textContent='Teacher'; rb.className='badge badge-teacher'; }
+  else { rb.textContent='Student'; rb.className='badge badge-student'; }
+  document.getElementById('sidebar-role-note').textContent = isTeacher ? 'You have teacher access.' : 'Logged in as student.';
+  if (isTeacher) { document.getElementById('dash-class-code').textContent = CFG.classCode; }
+  resetStudentState();
+  renderStudentQuestions();
+  updateScore();
+  renderBank();
+}
+
+// ══════════════════════════════════════════
+//  NAV
+// ══════════════════════════════════════════
+function showPanel(name, el) {
+  document.querySelectorAll('.panel').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
+  document.getElementById('panel-'+name).classList.add('active');
+  if (el) el.classList.add('active');
+  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', settings:'Settings' };
+  document.getElementById('topbar-title').textContent = titles[name]||name;
+  if (name==='dashboard') loadDashboard();
+}
+
+// ══════════════════════════════════════════
+//  QUESTIONS DATA
+// ══════════════════════════════════════════
+var questions = [
+  { id:1, type:'formula', text:'What is the chemical formula for <strong>sulfuric acid</strong>?', answers:['h2so4'], hint:'Type plain text — subscripts auto-render in the preview.' },
+  { id:2, type:'formula', text:'Write the formula for the <strong>phosphate ion</strong>.', answers:['po4^3-','po43-'], hint:'Use ^ for charges: PO4^3-' },
+  { id:3, type:'sci', text:"Avogadro's number — how many particles per mole?", correctVal:6.022e23, tol:0.01 },
+  { id:4, type:'mc', text:'Which of the following is a <strong>covalent bond</strong>?', options:['NaCl','MgO','H₂O','KBr'], correct:2, explanation:'H₂O involves shared electrons between H and O — the hallmark of covalent bonding.' },
+  { id:5, type:'calc', text:'Calculate the molar mass of <strong>NaCl</strong>. (Na = 22.99, Cl = 35.45)', correctVal:58.44, unit:'g/mol', tol:0.02, hint:'Add the atomic masses of Na and Cl.' }
+];
+var nextId = 6;
+var MAX=3, UNLIMITED=false;
+var usedAttempts={}, solved={}, scoreCorrect=0, scoreAttempts=0;
+
+// ══════════════════════════════════════════
+//  CHEM HELPERS
+// ══════════════════════════════════════════
+function parseChem(raw) {
+  if (!raw) return '<span style="color:var(--text3);font-size:13px;">preview</span>';
+  var s = raw;
+  s = s.replace(/\^([+\-]?\d+[+\-]?|[+\-]+)/g, function(_,x){ return '<sup>'+x+'</sup>'; });
+  s = s.replace(/([A-Za-z\)\]])(\d+)/g, function(_,a,b){ return a+'<sub>'+b+'</sub>'; });
+  return s;
+}
+function normChem(s) { return s.replace(/\s/g,'').toLowerCase(); }
+
+// ══════════════════════════════════════════
+//  STUDENT VIEW
+// ══════════════════════════════════════════
+function resetStudentState() { usedAttempts={}; solved={}; scoreCorrect=0; scoreAttempts=0; }
+
+function renderStudentQuestions() {
+  var container = document.getElementById('student-questions');
+  if (!questions.length) { container.innerHTML='<div class="empty">No questions yet — teacher will add some soon.</div>'; return; }
+  container.innerHTML='';
+  questions.forEach(function(q,i) {
+    var div=document.createElement('div');
+    div.className='q-card'; div.id='qcard-'+q.id;
+    var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
+    var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+    var figHtml='';
+    if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
+    if (q.tableData) {
+      figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
+      q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
+      figHtml+='</table></div>';
+    }
+    var body='';
+    if (q.type==='formula') {
+      body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
+          +'<div class="preview-render" id="sp-'+q.id+'"></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
+    } else if (q.type==='sci') {
+      var tv=((q.tol||0.01)*100).toFixed(1);
+      body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
+          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+    } else if (q.type==='mc') {
+      body='<div class="mc-options" id="mcopts-'+q.id+'">';
+      var letters=['A','B','C','D','E','F'];
+      (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
+      body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
+      if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
+    } else if (q.type==='calc') {
+      var cv=((q.tol||0.02)*100).toFixed(1);
+      body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
+          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+    }
+    div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
+      +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
+      +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
+      +'<div class="result-msg" id="res-'+q.id+'"></div>';
+    container.appendChild(div);
+    updateAttemptUI(q.id);
+  });
+}
+
+function selectMC(qid,oi) {
+  if (solved[qid]) return;
+  var q=questions.find(function(x){ return x.id===qid; });
+  if (!q) return;
+  (q.options||[]).forEach(function(_,i){ var e=document.getElementById('mcopt-'+qid+'-'+i); if(e) e.classList.remove('selected'); });
+  var sel=document.getElementById('mcopt-'+qid+'-'+oi);
+  if (sel) sel.classList.add('selected');
+  q._sel=oi;
+}
+
+function checkFormula(qid) {
+  if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
+  var raw=document.getElementById('si-'+qid).value.trim();
+  if (!raw) return;
+  var q=questions.find(function(x){ return x.id===qid; });
+  var ok=q.answers.some(function(a){ return a===normChem(raw); });
+  handleResult(qid,ok,ok?'Correct! '+parseChem(raw)+' is right.':null,q.answers[0]);
+}
+
+function checkSci(qid,correctVal) {
+  if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
+  var c=parseFloat(document.getElementById('scoeff-'+qid).value);
+  var e=parseInt(document.getElementById('sexp-'+qid).value);
+  var el=document.getElementById('res-'+qid);
+  if (isNaN(c)||isNaN(e)) { el.className='result-msg partial'; el.innerHTML='Enter both coefficient and exponent.'; return; }
+  var tol=parseFloat(document.getElementById('stol-'+qid).value)/100;
+  var sv=c*Math.pow(10,e), diff=Math.abs(sv-correctVal)/Math.abs(correctVal);
+  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal.toExponential(3));
+}
+
+function checkMC(qid) {
+  if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
+  var q=questions.find(function(x){ return x.id===qid; });
+  if (q._sel===undefined) { var el=document.getElementById('res-'+qid); el.className='result-msg partial'; el.innerHTML='Please select an answer.'; return; }
+  var ok=q._sel===q.correct;
+  var letters=['A','B','C','D','E','F'];
+  handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct]);
+  if (ok) {
+    (q.options||[]).forEach(function(_,i){ var e=document.getElementById('mcopt-'+qid+'-'+i); if(e){ e.classList.add('disabled'); if(i===q.correct) e.classList.add('correct-opt'); } });
+    var expEl=document.getElementById('mc-exp-'+qid); if(expEl) expEl.style.display='block';
+  } else {
+    var w=document.getElementById('mcopt-'+qid+'-'+q._sel); if(w) w.classList.add('wrong-opt');
+  }
+}
+
+function checkCalc(qid,correctVal) {
+  if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
+  var v=parseFloat(document.getElementById('scalc-'+qid).value);
+  if (isNaN(v)) { var el=document.getElementById('res-'+qid); el.className='result-msg partial'; el.innerHTML='Please enter a value.'; return; }
+  var tol=parseFloat(document.getElementById('ctol-'+qid).value)/100;
+  var diff=Math.abs(v-correctVal)/Math.abs(correctVal);
+  var q=questions.find(function(x){ return x.id===qid; });
+  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal+(q.unit?' '+q.unit:''));
+}
+
+function handleResult(qid, ok, successMsg, correctDisplay) {
+  usedAttempts[qid]=(usedAttempts[qid]||0)+1;
+  scoreAttempts++;
+  var el=document.getElementById('res-'+qid);
+  if (ok) {
+    solved[qid]=true; scoreCorrect++;
+    el.className='result-msg correct'; el.innerHTML=successMsg||'Correct!';
+    lockQ(qid);
+    saveResult(qid, true, usedAttempts[qid]);
+  } else {
+    var rem=UNLIMITED?Infinity:MAX-(usedAttempts[qid]||0);
+    if (!UNLIMITED&&rem<=0) {
+      el.className='result-msg exhausted'; el.innerHTML='No attempts remaining. The correct answer was: <strong>'+correctDisplay+'</strong>';
+      lockQ(qid);
+      saveResult(qid, false, usedAttempts[qid]);
+    } else {
+      el.className='result-msg incorrect';
+      el.innerHTML=UNLIMITED?'Not quite — try again.':'Not quite — '+rem+' attempt'+(rem===1?'':'s')+' remaining.';
+    }
+  }
+  updateAttemptUI(qid); updateScore();
+}
+
+function lockQ(qid) {
+  var card=document.getElementById('qcard-'+qid);
+  if (!card) return;
+  card.querySelectorAll('input:not([type=range])').forEach(function(e){ e.disabled=true; });
+  card.querySelectorAll('button.btn-primary').forEach(function(e){ e.disabled=true; });
+  card.classList.add('locked');
+}
+
+function updateAttemptUI(qid) {
+  var el=document.getElementById('astat-'+qid);
+  var bar=document.getElementById('prog-'+qid);
+  if (!el||!bar) return;
+  if (UNLIMITED) { el.textContent='Unlimited'; el.className='attempt-status ok'; bar.style.width='100%'; bar.style.background='var(--accent)'; return; }
+  var used=usedAttempts[qid]||0, rem=MAX-used;
+  if (solved[qid]) { el.textContent='Solved'; el.className='attempt-status solved'; bar.style.width='100%'; bar.style.background='var(--green)'; return; }
+  if (rem<=0) { el.textContent='No attempts left'; el.className='attempt-status danger'; bar.style.width='0%'; return; }
+  el.textContent=rem+' of '+MAX+' left';
+  var pct=Math.round((rem/MAX)*100);
+  bar.style.width=pct+'%'; bar.style.background=pct<=33?'var(--red)':pct<=60?'#d4881e':'var(--accent)';
+  el.className='attempt-status'+(pct<=33?' danger':pct<=60?' warn':' ok');
+}
+
+function updateScore() {
+  var unsolved=questions.length-Object.keys(solved).filter(function(k){ return solved[k]; }).length;
+  document.getElementById('sc-correct').textContent=scoreCorrect;
+  document.getElementById('sc-attempts').textContent=scoreAttempts;
+  document.getElementById('sc-pct').textContent=scoreAttempts>0?Math.round(scoreCorrect/scoreAttempts*100)+'%':'—';
+  document.getElementById('sc-left').textContent=unsolved;
+}
+
+// ══════════════════════════════════════════
+//  SAVE RESULT TO SUPABASE
+// ══════════════════════════════════════════
+async function saveResult(qid, correct, attemptsUsed) {
+  if (!supabase||!currentUser) return;
+  var q=questions.find(function(x){ return x.id===qid; });
+  await supabase.from('student_results').insert({
+    student_id: currentUser.id,
+    question_id: qid,
+    question_text: (q?q.text:'').replace(/<[^>]+>/g,'').substring(0,120),
+    correct: correct,
+    attempts_used: attemptsUsed
+  });
+}
+
+// ══════════════════════════════════════════
+//  TEACHER DASHBOARD
+// ══════════════════════════════════════════
+async function loadDashboard() {
+  document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
+  var { data: profiles } = await supabase.from('profiles').select('*').eq('class_code', CFG.classCode).eq('role','student');
+  var { data: results } = await supabase.from('student_results').select('*');
+  if (!profiles||!results) { document.getElementById('dashboard-content').innerHTML='<div class="empty">Could not load data.</div>'; return; }
+
+  if (!profiles.length) { document.getElementById('dashboard-content').innerHTML='<div class="empty">No students have registered yet.</div>'; return; }
+
+  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Score</th><th>% correct</th><th>Missed questions</th></tr></thead><tbody>';
+  profiles.forEach(function(p) {
+    var pResults = results.filter(function(r){ return r.student_id===p.id; });
+    var totalAns = pResults.length;
+    var correctAns = pResults.filter(function(r){ return r.correct; }).length;
+    var pct = totalAns>0 ? Math.round(correctAns/totalAns*100) : 0;
+    var missed = pResults.filter(function(r){ return !r.correct; });
+    var missedHtml = missed.length ? missed.map(function(r){ return '<span class="missed-chip">'+r.question_text.substring(0,30)+'…</span>'; }).join('') : '<span style="color:var(--text3);font-size:12px;">—</span>';
+    var fillColor = pct>=80?'var(--green)':pct>=50?'#d4881e':'var(--red)';
+    html+='<tr>'
+      +'<td style="font-weight:500;">'+p.username+'</td>'
+      +'<td>'+correctAns+' / '+totalAns+'</td>'
+      +'<td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill" style="width:'+pct+'%;background:'+fillColor+';"></div></div><span style="font-size:13px;min-width:34px;">'+pct+'%</span></div></td>'
+      +'<td><div class="missed-list">'+missedHtml+'</div></td>'
+      +'</tr>';
+  });
+  html+='</tbody></table></div>';
+  document.getElementById('dashboard-content').innerHTML=html;
+}
+
+// ══════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════
+function toggleUnlim(chk) { document.getElementById('max-input').disabled=chk.checked; }
+function applySettings() {
+  UNLIMITED=document.getElementById('unlim-chk').checked;
+  if (!UNLIMITED) { var v=parseInt(document.getElementById('max-input').value); MAX=(isNaN(v)||v<1)?1:v; document.getElementById('max-input').value=MAX; }
+  resetStudentState(); renderStudentQuestions(); updateScore();
+  var n=document.getElementById('settings-note'); n.textContent=UNLIMITED?'Unlimited applied!':'Max '+MAX+' applied!';
+  setTimeout(function(){ n.textContent=''; },2000);
+}
+
+// ══════════════════════════════════════════
+//  BUILDER
+// ══════════════════════════════════════════
+var builderType='formula', mcOptCount=0;
+
+function setBuilderType(t) {
+  builderType=t;
+  ['formula','sci','mc','calc'].forEach(function(x){
+    document.getElementById('tt-'+x).className='type-tab'+(t===x?' active':'');
+    document.getElementById('b-fields-'+x).style.display=t===x?'':'none';
+  });
+  if (t==='mc'&&mcOptCount===0) { addMCOpt();addMCOpt();addMCOpt();addMCOpt(); }
+}
+
+function addMCOpt() {
+  var i=mcOptCount++;
+  var div=document.createElement('div');
+  div.className='mc-builder-option'; div.id='mcbopt-'+i;
+  div.innerHTML='<input type="radio" name="mc-correct" value="'+i+'" style="accent-color:var(--accent);"> <span style="font-size:12px;color:var(--text2);white-space:nowrap;">Correct</span> <input type="text" class="form-input" id="mcbt-'+i+'" placeholder="Option '+(i+1)+'" style="font-size:14px;"> <button class="btn btn-danger btn-sm btn-xs" onclick="document.getElementById(\'mcbopt-'+i+'\').remove()" style="padding:4px 8px;">✕</button>';
+  document.getElementById('mc-options-builder').appendChild(div);
+}
+
+function handleImageUpload(e) {
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){ document.getElementById('b-img-preview').src=ev.target.result; document.getElementById('b-img-wrap').style.display=''; };
+  reader.readAsDataURL(file);
+}
+function clearImage() { document.getElementById('b-img-wrap').style.display='none'; document.getElementById('b-img-file').value=''; }
+
+function genTable() {
+  var rows=parseInt(document.getElementById('tbl-rows').value)||2;
+  var cols=parseInt(document.getElementById('tbl-cols').value)||2;
+  var html='<table>';
+  html+='<tr>'; for(var c=0;c<cols;c++) html+='<th><input type="text" placeholder="Header '+(c+1)+'"></th>'; html+='</tr>';
+  for(var r=0;r<rows;r++){ html+='<tr>'; for(var c=0;c<cols;c++) html+='<td><input type="text" placeholder=""></td>'; html+='</tr>'; }
+  html+='</table>';
+  document.getElementById('b-table-builder').innerHTML=html;
+}
+function clearTable() { document.getElementById('b-table-builder').innerHTML=''; }
+
+function getTableData() {
+  var el=document.getElementById('b-table-builder').querySelector('table');
+  if(!el) return null;
+  var data=[];
+  el.querySelectorAll('tr').forEach(function(row){
+    var cells=[]; row.querySelectorAll('th input,td input').forEach(function(c){ cells.push(c.value); }); data.push(cells);
+  });
+  return data.some(function(r){ return r.some(function(c){ return c.trim(); }); }) ? data : null;
+}
+
+function previewAns() {
+  var raw=(document.getElementById('b-formula-ans').value||'').split(',')[0].trim();
+  document.getElementById('b-formula-preview').innerHTML=parseChem(raw);
+}
+
+function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
+
+function addQuestion() {
+  var qtext=document.getElementById('b-qtext').value.trim();
+  if (!qtext) { showBNote('Please enter a question.'); return; }
+  var q={ id:nextId++, type:builderType, text:qtext };
+  var imgEl=document.getElementById('b-img-preview');
+  if (imgEl.src&&imgEl.src!==window.location.href) { q.image=imgEl.src; q.imageCaption=document.getElementById('b-img-caption').value.trim(); }
+  var tbl=getTableData(); if(tbl) q.tableData=tbl;
+  if (builderType==='formula') {
+    var raw=document.getElementById('b-formula-ans').value.trim();
+    if (!raw) { showBNote('Enter at least one answer.'); return; }
+    q.answers=raw.split(',').map(function(a){ return normChem(a.trim()); }).filter(Boolean);
+    q.hint=document.getElementById('b-formula-hint').value.trim();
+  } else if (builderType==='sci') {
+    var c=parseFloat(document.getElementById('b-sci-coeff').value), e=parseInt(document.getElementById('b-sci-exp').value);
+    if (isNaN(c)||isNaN(e)) { showBNote('Enter coefficient and exponent.'); return; }
+    q.correctVal=c*Math.pow(10,e); q.tol=Math.max(0.001,(parseFloat(document.getElementById('b-sci-tol').value)||1)/100);
+    q.hint=document.getElementById('b-sci-hint').value.trim();
+  } else if (builderType==='mc') {
+    var opts=[],correct=-1;
+    document.querySelectorAll('input[name="mc-correct"]').forEach(function(r){
+      var txt=document.getElementById('mcbt-'+r.value);
+      if(txt&&txt.value.trim()){ if(r.checked) correct=opts.length; opts.push(txt.value.trim()); }
+    });
+    if (opts.length<2) { showBNote('Add at least 2 options.'); return; }
+    if (correct<0) { showBNote('Select the correct answer.'); return; }
+    q.options=opts; q.correct=correct; q.explanation=document.getElementById('b-mc-explain').value.trim();
+  } else if (builderType==='calc') {
+    var val=parseFloat(document.getElementById('b-calc-val').value);
+    if (isNaN(val)) { showBNote('Enter the correct value.'); return; }
+    q.correctVal=val; q.unit=document.getElementById('b-calc-unit').value.trim();
+    q.tol=Math.max(0,(parseFloat(document.getElementById('b-calc-tol').value)||2)/100);
+    q.hint=document.getElementById('b-calc-hint').value.trim();
+  }
+  questions.push(q);
+  resetBuilderForm(); showBNote('Question added!');
+  renderBank(); renderStudentQuestions();
+}
+
+function resetBuilderForm() {
+  ['b-qtext','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  ['b-sci-coeff','b-sci-exp','b-calc-val'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  document.getElementById('b-sci-tol').value='1'; document.getElementById('b-calc-tol').value='2';
+  document.getElementById('b-formula-preview').innerHTML='';
+  clearImage(); clearTable();
+  document.getElementById('mc-options-builder').innerHTML=''; mcOptCount=0;
+  if (builderType==='mc') { addMCOpt();addMCOpt();addMCOpt();addMCOpt(); }
+}
+
+// ══════════════════════════════════════════
+//  BANK
+// ══════════════════════════════════════════
+function renderBank() {
+  var el=document.getElementById('bank-list');
+  document.getElementById('bank-count').textContent=questions.length+' question'+(questions.length===1?'':'s');
+  if (!questions.length) { el.innerHTML='<div class="empty">No questions yet.</div>'; return; }
+  el.innerHTML='';
+  questions.forEach(function(q,i){
+    var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+    var meta=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
+    var div=document.createElement('div');
+    div.className='bank-item';
+    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+'</div><div class="bank-item-meta">'+tl[q.type]+' · '+meta+'</div></div><div class="bank-actions">'+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
+    el.appendChild(div);
+  });
+}
+
+function deleteQ(id) {
+  questions=questions.filter(function(q){ return q.id!==id; });
+  delete usedAttempts[id]; delete solved[id];
+  renderBank(); renderStudentQuestions();
+}
+
+function exportQ() {
+  var blob=new Blob([JSON.stringify({questions},null,2)],{type:'application/json'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='chemhw-questions.json'; a.click();
+}
+function importQ(e) {
+  var file=e.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(ev){
+    try {
+      var data=JSON.parse(ev.target.result);
+      if (data.questions&&Array.isArray(data.questions)) {
+        questions=data.questions;
+        nextId=Math.max.apply(null,questions.map(function(q){ return q.id; }))+1;
+        resetStudentState(); renderBank(); renderStudentQuestions();
+        alert('Imported '+questions.length+' questions.');
+      }
+    } catch(err){ alert('Could not read file.'); }
+  };
+  reader.readAsText(file); e.target.value='';
+}
+
+// ══════════════════════════════════════════
+//  EDIT ANSWERS MODAL
+// ══════════════════════════════════════════
+var editModalQid=null, editModalAnswers=[];
+
+function openEditModal(qid) {
+  var q=questions.find(function(x){ return x.id===qid; }); if(!q) return;
+  editModalQid=qid; editModalAnswers=q.answers.slice();
+  document.getElementById('edit-modal-q').textContent=q.text.replace(/<[^>]+>/g,'');
+  renderEditTags();
+  document.getElementById('edit-modal').classList.add('open');
+}
+function renderEditTags() {
+  var el=document.getElementById('edit-tags'); el.innerHTML='';
+  editModalAnswers.forEach(function(a,i){
+    var span=document.createElement('span'); span.className='answer-tag';
+    span.innerHTML=parseChem(a)+'<button onclick="removeEditAns('+i+')" title="Remove">×</button>';
+    el.appendChild(span);
+  });
+}
+function removeEditAns(i) { editModalAnswers.splice(i,1); renderEditTags(); }
+function addEditAns() {
+  var inp=document.getElementById('edit-new-ans');
+  var val=normChem(inp.value.trim()); if(!val) return;
+  if (!editModalAnswers.includes(val)) editModalAnswers.push(val);
+  inp.value=''; renderEditTags();
+}
+function saveEditModal() {
+  var q=questions.find(function(x){ return x.id===editModalQid; });
+  if (q&&editModalAnswers.length>0) q.answers=editModalAnswers.slice();
+  closeEditModal(); renderBank();
+}
+function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+document.getElementById('edit-new-ans').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); addEditAns(); } });
+document.getElementById('edit-modal').addEventListener('click',function(e){ if(e.target===this) closeEditModal(); });
+
+// ══════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════
+boot();
+</script>
+</body>
+</html>

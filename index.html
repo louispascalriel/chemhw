@@ -523,7 +523,9 @@ function sbHeaders() {
 }
 async function sbAuth(path, body) {
   var r = await fetch(CFG.url + '/auth/v1' + path, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey': CFG.key }, body: JSON.stringify(body) });
-  return r.json();
+  var json = await r.json();
+  if (!r.ok) console.error('sbAuth error', path, r.status, JSON.stringify(json));
+  return json;
 }
 async function sbSelect(table, filter) {
   var url = CFG.url + '/rest/v1/' + table + '?' + (filter||'');
@@ -660,7 +662,7 @@ async function doRegister() {
   var btn=document.getElementById('reg-btn'); btn.disabled=true; btn.textContent='Creating account…';
   var email = uname+'.student@chemhw.edu';
   var data = await sbSignUp(email, pass);
-  if (data.error || !data.user) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg', data.error?.message||'Registration failed.','error'); return; }
+  var errMsg = data.error_description || data.msg || data.error?.message || data.message || JSON.stringify(data); if (data.error || data.error_description || !data.user) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg', errMsg,'error'); return; }
   var role = (uname==='teacher'||uname==='admin')?'teacher':'student';
   currentUser = data.user; currentUser.access_token = data.access_token;
   sbSaveSession(data);

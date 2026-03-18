@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ChemHW</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root {
   --bg: #f7f6f2;
@@ -520,7 +520,7 @@ function saveCFG() { localStorage.setItem('chemhw_cfg', JSON.stringify(CFG)); }
 
 function initSupabase() {
   if (!CFG.url || !CFG.key) return false;
-  try { if (!window.supabase) { console.error('Supabase library not loaded'); return false; } supabase = window.supabase.createClient(CFG.url, CFG.key); return true; }
+  try { if (!window.supabase) { console.error('Supabase library not loaded'); return false; } var createClient = window.supabase.createClient || (window.supabase.default && window.supabase.default.createClient); if (!createClient) { console.error('createClient not found on window.supabase'); return false; } supabase = createClient(CFG.url, CFG.key); return true; }
   catch(e) { return false; }
 }
 

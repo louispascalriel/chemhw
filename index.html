@@ -638,7 +638,7 @@ async function doLogin() {
   if (!username||!pass) { showAuthMsg('login-msg','Please fill in all fields.','error'); return; }
   var btn = document.getElementById('login-btn');
   btn.disabled=true; btn.textContent='Signing in…';
-  var email = username+'@chemhw.local';
+  var email = username+'.student@chemhw.edu';
   var data = await sbSignIn(email, pass);
   btn.disabled=false; btn.textContent='Sign in';
   if (data.error || !data.access_token) { showAuthMsg('login-msg', 'Username or password incorrect.', 'error'); return; }
@@ -658,7 +658,7 @@ async function doRegister() {
   if (pass.length<6) { showAuthMsg('reg-msg','Password must be at least 6 characters.','error'); return; }
   if (code!==CFG.classCode) { showAuthMsg('reg-msg','Invalid class code. Ask your teacher for the correct code.','error'); return; }
   var btn=document.getElementById('reg-btn'); btn.disabled=true; btn.textContent='Creating account…';
-  var email = uname+'@chemhw.local';
+  var email = uname+'.student@chemhw.edu';
   var data = await sbSignUp(email, pass);
   if (data.error || !data.user) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg', data.error?.message||'Registration failed.','error'); return; }
   var role = (uname==='teacher'||uname==='admin')?'teacher':'student';

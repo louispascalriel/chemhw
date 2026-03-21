@@ -694,6 +694,14 @@ async function doRegister() {
 async function loadProfile(user) {
   var r = await sbSelect('profiles', 'id=eq.'+user.id+'&limit=1');
   currentProfile = (r.data && r.data[0]) || null;
+  if (currentProfile && (currentProfile.username === 'teacher' || currentProfile.username === 'admin') && currentProfile.role !== 'teacher') {
+    currentProfile.role = 'teacher';
+    await fetch(CFG.url + '/rest/v1/profiles?id=eq.' + user.id, {
+      method: 'PATCH',
+      headers: Object.assign({}, sbHeaders(), { 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ role: 'teacher' })
+    });
+  }
 }
 
 async function doLogout() {

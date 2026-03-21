@@ -694,6 +694,11 @@ async function doRegister() {
 async function loadProfile(user) {
   var r = await sbSelect('profiles', 'id=eq.'+user.id+'&limit=1');
   currentProfile = (r.data && r.data[0]) || null;
+  // Synthesize profile from email if DB read failed
+  if (!currentProfile && user.email) {
+    var uname = user.email.split('.student@')[0];
+    currentProfile = { id: user.id, username: uname, role: (uname==='teacher'||uname==='admin') ? 'teacher' : 'student' };
+  }
   if (currentProfile && (currentProfile.username === 'teacher' || currentProfile.username === 'admin') && currentProfile.role !== 'teacher') {
     currentProfile.role = 'teacher';
     await fetch(CFG.url + '/rest/v1/profiles?id=eq.' + user.id, {
@@ -716,7 +721,8 @@ async function doLogout() {
 // ══════════════════════════════════════════
 function showApp() {
   showScreen('app');
-  var isTeacher = currentProfile && (currentProfile.role==='teacher' || currentProfile.username==='teacher' || currentProfile.username==='admin');
+  var emailUname = currentUser && currentUser.email ? currentUser.email.split('.student@')[0] : '';
+  var isTeacher = (currentProfile && (currentProfile.role==='teacher' || currentProfile.username==='teacher' || currentProfile.username==='admin')) || emailUname==='teacher' || emailUname==='admin';
   document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
   document.getElementById('student-nav').style.display = isTeacher ? 'none' : '';
   var uname = currentProfile ? currentProfile.username : (currentUser ? currentUser.email : '?');

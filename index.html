@@ -716,7 +716,8 @@ async function doRegister() {
   btn.disabled=false; btn.textContent='Create account';
   if (pe.error) { showAuthMsg('reg-msg','Account created but profile failed: '+(pe.error.message||JSON.stringify(pe.error)),'error'); return; }
   showAuthMsg('reg-msg','Account created! Signing you in…','success');
-  await doLogin();
+  await loadProfile(data.user);
+  showApp();
 }
 
 async function loadProfile(user) {

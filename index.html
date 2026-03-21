@@ -252,6 +252,7 @@ create table if not exists student_results (
   question_text text,
   correct boolean not null,
   attempts_used int not null default 1,
+  student_answer text,
   answered_at timestamptz default now()
 );
 alter table profiles enable row level security;
@@ -261,7 +262,9 @@ create policy "Users update own profile" on profiles for update using (auth.uid(
 create policy "Teachers read all profiles" on profiles for select using (true);
 create policy "Users read own results" on student_results for select using (auth.uid() = student_id);
 create policy "Users insert own results" on student_results for insert with check (auth.uid() = student_id);
-create policy "Teachers read all results" on student_results for select using (true);</pre>
+create policy "Teachers read all results" on student_results for select using (true);
+-- If upgrading from an older version, run this to add the student_answer column:
+-- alter table student_results add column if not exists student_answer text;</pre>
           <button class="btn btn-secondary btn-sm" onclick="copySQL()" style="margin-top:6px;">Copy SQL</button>
         </div>
       </div>
@@ -325,10 +328,12 @@ create policy "Teachers read all results" on student_results for select using (t
         <div class="logo-title">ChemHW</div>
         <div class="logo-sub">Chemistry Homework</div>
       </div>
+      <div id="student-nav">
       <div class="nav-section">Student</div>
-      <div class="nav-item active" id="nav-questions" onclick="showPanel('questions',this)">
+      <div class="nav-item" id="nav-questions" onclick="showPanel('questions',this)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
         Questions
+      </div>
       </div>
       <div id="teacher-nav" style="display:none;">
         <div class="nav-section">Teacher</div>
@@ -400,6 +405,7 @@ create policy "Teachers read all results" on student_results for select using (t
               <div class="type-tab" id="tt-calc" onclick="setBuilderType('calc')">Calculation</div>
             </div>
             <div class="form-group"><label class="form-label">Question text</label><textarea class="form-textarea" id="b-qtext" placeholder="Enter the question…"></textarea></div>
+            <div class="form-group"><label class="form-label">Assignment <span style="font-weight:400;text-transform:none;font-size:11px;">(group questions into assignments for students)</span></label><input class="form-input" id="b-assignment" placeholder="e.g. Unit 3 Homework" list="assignment-datalist"><datalist id="assignment-datalist"></datalist></div>
             <div class="form-group">
               <label class="form-label">Attach image (optional)</label>
               <div class="uploader" onclick="document.getElementById('b-img-file').click()"><p>Click to upload PNG / JPG</p><input type="file" id="b-img-file" accept="image/*" style="display:none" onchange="handleImageUpload(event)"></div>
@@ -454,7 +460,8 @@ create policy "Teachers read all results" on student_results for select using (t
 
           <div class="card">
             <div class="card-header"><div class="card-title">Question bank</div><span style="font-size:13px;color:var(--text3);" id="bank-count">0 questions</span></div>
-            <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
+            <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
+              <select class="form-select" id="bank-filter" onchange="renderBank()" style="width:auto;min-width:160px;font-size:13px;padding:5px 9px;"><option value="">All assignments</option></select>
               <button class="btn btn-secondary btn-sm" onclick="exportQ()">Export questions</button>
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">Import questions</button>
               <input type="file" id="import-file" accept=".json" style="display:none" onchange="importQ(event)">
@@ -514,8 +521,10 @@ var currentProfile = null;
 
 function loadCFG() {
   try { var s = localStorage.getItem('chemhw_cfg'); if(s) CFG = JSON.parse(s); } catch(e){}
+  try { var q = localStorage.getItem('chemhw_questions'); if(q){ var d=JSON.parse(q); if(d.questions&&d.questions.length){ questions=d.questions; nextId=d.nextId||nextId; } } } catch(e){}
 }
 function saveCFG() { localStorage.setItem('chemhw_cfg', JSON.stringify(CFG)); }
+function saveQuestions() { localStorage.setItem('chemhw_questions', JSON.stringify({questions:questions,nextId:nextId})); }
 
 // ── Supabase REST helpers (no library needed) ──
 function sbHeaders() {
@@ -692,6 +701,7 @@ function showApp() {
   showScreen('app');
   var isTeacher = currentProfile && currentProfile.role==='teacher';
   document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
+  document.getElementById('student-nav').style.display = isTeacher ? 'none' : '';
   var uname = currentProfile ? currentProfile.username : (currentUser ? currentUser.email : '?');
   var initials = uname.substring(0,2).toUpperCase();
   document.getElementById('user-avatar').textContent = initials;
@@ -700,11 +710,17 @@ function showApp() {
   if (isTeacher) { rb.textContent='Teacher'; rb.className='badge badge-teacher'; }
   else { rb.textContent='Student'; rb.className='badge badge-student'; }
   document.getElementById('sidebar-role-note').textContent = isTeacher ? 'You have teacher access.' : 'Logged in as student.';
-  if (isTeacher) { document.getElementById('dash-class-code').textContent = CFG.classCode; }
-  resetStudentState();
-  renderStudentQuestions();
-  updateScore();
-  renderBank();
+  if (isTeacher) {
+    document.getElementById('dash-class-code').textContent = CFG.classCode;
+    renderBank();
+    showPanel('dashboard', document.getElementById('nav-dashboard'));
+  } else {
+    resetStudentState();
+    renderStudentQuestions();
+    updateScore();
+    renderBank();
+    showPanel('questions', document.getElementById('nav-questions'));
+  }
 }
 
 // ══════════════════════════════════════════
@@ -817,7 +833,7 @@ function checkFormula(qid) {
   if (!raw) return;
   var q=questions.find(function(x){ return x.id===qid; });
   var ok=q.answers.some(function(a){ return a===normChem(raw); });
-  handleResult(qid,ok,ok?'Correct! '+parseChem(raw)+' is right.':null,q.answers[0]);
+  handleResult(qid,ok,ok?'Correct! '+parseChem(raw)+' is right.':null,q.answers[0],raw);
 }
 
 function checkSci(qid,correctVal) {
@@ -828,7 +844,7 @@ function checkSci(qid,correctVal) {
   if (isNaN(c)||isNaN(e)) { el.className='result-msg partial'; el.innerHTML='Enter both coefficient and exponent.'; return; }
   var tol=parseFloat(document.getElementById('stol-'+qid).value)/100;
   var sv=c*Math.pow(10,e), diff=Math.abs(sv-correctVal)/Math.abs(correctVal);
-  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal.toExponential(3));
+  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal.toExponential(3),c+'×10^'+e);
 }
 
 function checkMC(qid) {
@@ -837,7 +853,8 @@ function checkMC(qid) {
   if (q._sel===undefined) { var el=document.getElementById('res-'+qid); el.className='result-msg partial'; el.innerHTML='Please select an answer.'; return; }
   var ok=q._sel===q.correct;
   var letters=['A','B','C','D','E','F'];
-  handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct]);
+  var selectedAnswer=letters[q._sel]+': '+q.options[q._sel];
+  handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct],selectedAnswer);
   if (ok) {
     (q.options||[]).forEach(function(_,i){ var e=document.getElementById('mcopt-'+qid+'-'+i); if(e){ e.classList.add('disabled'); if(i===q.correct) e.classList.add('correct-opt'); } });
     var expEl=document.getElementById('mc-exp-'+qid); if(expEl) expEl.style.display='block';
@@ -853,24 +870,23 @@ function checkCalc(qid,correctVal) {
   var tol=parseFloat(document.getElementById('ctol-'+qid).value)/100;
   var diff=Math.abs(v-correctVal)/Math.abs(correctVal);
   var q=questions.find(function(x){ return x.id===qid; });
-  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal+(q.unit?' '+q.unit:''));
+  handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal+(q.unit?' '+q.unit:''),v+(q.unit?' '+q.unit:''));
 }
 
-function handleResult(qid, ok, successMsg, correctDisplay) {
+function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
   usedAttempts[qid]=(usedAttempts[qid]||0)+1;
   scoreAttempts++;
   var el=document.getElementById('res-'+qid);
+  saveResult(qid, ok, usedAttempts[qid], studentAnswer);
   if (ok) {
     solved[qid]=true; scoreCorrect++;
     el.className='result-msg correct'; el.innerHTML=successMsg||'Correct!';
     lockQ(qid);
-    saveResult(qid, true, usedAttempts[qid]);
   } else {
     var rem=UNLIMITED?Infinity:MAX-(usedAttempts[qid]||0);
     if (!UNLIMITED&&rem<=0) {
       el.className='result-msg exhausted'; el.innerHTML='No attempts remaining. The correct answer was: <strong>'+correctDisplay+'</strong>';
       lockQ(qid);
-      saveResult(qid, false, usedAttempts[qid]);
     } else {
       el.className='result-msg incorrect';
       el.innerHTML=UNLIMITED?'Not quite — try again.':'Not quite — '+rem+' attempt'+(rem===1?'':'s')+' remaining.';
@@ -912,16 +928,23 @@ function updateScore() {
 // ══════════════════════════════════════════
 //  SAVE RESULT TO SUPABASE
 // ══════════════════════════════════════════
-async function saveResult(qid, correct, attemptsUsed) {
+async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
   if (!currentUser) return;
   var q=questions.find(function(x){ return x.id===qid; });
-  await sbInsert('student_results', {
+  var row = {
     student_id: currentUser.id,
     question_id: qid,
     question_text: (q?q.text:'').replace(/<[^>]+>/g,'').substring(0,120),
     correct: correct,
-    attempts_used: attemptsUsed
-  });
+    attempts_used: attemptsUsed,
+    student_answer: String(studentAnswer||'')
+  };
+  var result = await sbInsert('student_results', row);
+  if (result.error) {
+    // Retry without student_answer in case column doesn't exist in old schema
+    delete row.student_answer;
+    await sbInsert('student_results', row);
+  }
 }
 
 // ══════════════════════════════════════════
@@ -930,30 +953,75 @@ async function saveResult(qid, correct, attemptsUsed) {
 async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
   var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student');
-  var rr = await sbSelect('student_results', '');
+  var rr = await sbSelect('student_results', 'order=answered_at.asc');
   var profiles = pr.data, results = rr.data;
   if (!profiles||!results) { document.getElementById('dashboard-content').innerHTML='<div class="empty">Could not load data.</div>'; return; }
-
   if (!profiles.length) { document.getElementById('dashboard-content').innerHTML='<div class="empty">No students have registered yet.</div>'; return; }
 
-  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Score</th><th>% correct</th><th>Missed questions</th></tr></thead><tbody>';
+  var totalQs = questions.length;
+  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Score</th><th>% of total</th><th></th></tr></thead><tbody>';
   profiles.forEach(function(p) {
     var pResults = results.filter(function(r){ return r.student_id===p.id; });
-    var totalAns = pResults.length;
-    var correctAns = pResults.filter(function(r){ return r.correct; }).length;
-    var pct = totalAns>0 ? Math.round(correctAns/totalAns*100) : 0;
-    var missed = pResults.filter(function(r){ return !r.correct; });
-    var missedHtml = missed.length ? missed.map(function(r){ return '<span class="missed-chip">'+r.question_text.substring(0,30)+'…</span>'; }).join('') : '<span style="color:var(--text3);font-size:12px;">—</span>';
+    // Group attempts by question_id, preserving order
+    var byQ = {};
+    pResults.forEach(function(r) {
+      if (!byQ[r.question_id]) byQ[r.question_id] = [];
+      byQ[r.question_id].push(r);
+    });
+    var qIds = Object.keys(byQ);
+    var correctQs = qIds.filter(function(qid){ return byQ[qid].some(function(r){ return r.correct; }); }).length;
+    var pct = totalQs>0 ? Math.round(correctQs/totalQs*100) : 0;
     var fillColor = pct>=80?'var(--green)':pct>=50?'#d4881e':'var(--red)';
-    html+='<tr>'
+
+    html+='<tr style="cursor:pointer;" onclick="toggleDetail(\'det-'+p.id+'\')">'
       +'<td style="font-weight:500;">'+p.username+'</td>'
-      +'<td>'+correctAns+' / '+totalAns+'</td>'
+      +'<td>'+correctQs+' / '+totalQs+'</td>'
       +'<td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill" style="width:'+pct+'%;background:'+fillColor+';"></div></div><span style="font-size:13px;min-width:34px;">'+pct+'%</span></div></td>'
-      +'<td><div class="missed-list">'+missedHtml+'</div></td>'
+      +'<td style="font-size:12px;color:var(--text3);white-space:nowrap;">▶ details</td>'
       +'</tr>';
+
+    // Expandable detail row
+    html+='<tr id="det-'+p.id+'" style="display:none;"><td colspan="4" style="padding:0;">';
+    html+='<div style="background:var(--surface2);padding:10px 14px;border-bottom:1px solid var(--border);">';
+    if (!qIds.length) {
+      html+='<div style="font-size:13px;color:var(--text3);">No attempts yet.</div>';
+    } else {
+      html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        +'<thead><tr>'
+        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Question</th>'
+        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Attempts &amp; answers</th>'
+        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Result</th>'
+        +'</tr></thead><tbody>';
+      qIds.forEach(function(qid) {
+        var attempts = byQ[qid];
+        var finalCorrect = attempts.some(function(r){ return r.correct; });
+        var qText = (attempts[0].question_text||('Q'+qid)).substring(0,80);
+        var attHtml = attempts.map(function(r) {
+          var icon = r.correct ? '✓' : '✗';
+          var color = r.correct ? 'var(--green)' : 'var(--red)';
+          var ans = r.student_answer ? ' <code style="font-family:\'DM Mono\',monospace;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:12px;">'+r.student_answer+'</code>' : '';
+          return '<span style="display:inline-flex;align-items:center;gap:3px;color:'+color+';margin-right:8px;white-space:nowrap;">'+icon+ans+'</span>';
+        }).join('');
+        var statusHtml = finalCorrect
+          ? '<span style="color:var(--green);font-weight:500;">Correct</span>'
+          : '<span style="color:var(--red);">Missed</span>';
+        html+='<tr style="border-top:1px solid var(--border);">'
+          +'<td style="padding:6px 8px;max-width:260px;color:var(--text2);font-size:13px;">'+qText+'</td>'
+          +'<td style="padding:6px 8px;">'+attHtml+'</td>'
+          +'<td style="padding:6px 8px;">'+statusHtml+'</td>'
+          +'</tr>';
+      });
+      html+='</tbody></table>';
+    }
+    html+='</div></td></tr>';
   });
   html+='</tbody></table></div>';
   document.getElementById('dashboard-content').innerHTML=html;
+}
+
+function toggleDetail(id) {
+  var el=document.getElementById(id);
+  if (el) el.style.display = el.style.display==='none' ? '' : 'none';
 }
 
 // ══════════════════════════════════════════
@@ -1029,7 +1097,7 @@ function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent
 function addQuestion() {
   var qtext=document.getElementById('b-qtext').value.trim();
   if (!qtext) { showBNote('Please enter a question.'); return; }
-  var q={ id:nextId++, type:builderType, text:qtext };
+  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General') };
   var imgEl=document.getElementById('b-img-preview');
   if (imgEl.src&&imgEl.src!==window.location.href) { q.image=imgEl.src; q.imageCaption=document.getElementById('b-img-caption').value.trim(); }
   var tbl=getTableData(); if(tbl) q.tableData=tbl;
@@ -1060,12 +1128,13 @@ function addQuestion() {
     q.hint=document.getElementById('b-calc-hint').value.trim();
   }
   questions.push(q);
+  saveQuestions();
   resetBuilderForm(); showBNote('Question added!');
   renderBank(); renderStudentQuestions();
 }
 
 function resetBuilderForm() {
-  ['b-qtext','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  ['b-qtext','b-assignment','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   ['b-sci-coeff','b-sci-exp','b-calc-val'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('b-sci-tol').value='1'; document.getElementById('b-calc-tol').value='2';
   document.getElementById('b-formula-preview').innerHTML='';
@@ -1079,21 +1148,31 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 function renderBank() {
   var el=document.getElementById('bank-list');
-  document.getElementById('bank-count').textContent=questions.length+' question'+(questions.length===1?'':'s');
-  if (!questions.length) { el.innerHTML='<div class="empty">No questions yet.</div>'; return; }
+  var assignments=[...new Set(questions.map(function(q){ return q.assignment||'General'; }))].sort();
+  var filterEl=document.getElementById('bank-filter');
+  var dlEl=document.getElementById('assignment-datalist');
+  var currentFilter=filterEl?filterEl.value:'';
+  if(filterEl){ filterEl.innerHTML='<option value="">All assignments</option>'+assignments.map(function(a){ return '<option value="'+a+'"'+(a===currentFilter?' selected':'')+'>'+a+'</option>'; }).join(''); }
+  if(dlEl){ dlEl.innerHTML=assignments.map(function(a){ return '<option value="'+a+'">'; }).join(''); }
+  var filtered=currentFilter?questions.filter(function(q){ return (q.assignment||'General')===currentFilter; }):questions;
+  document.getElementById('bank-count').textContent=filtered.length+(currentFilter?' of '+questions.length:'')+' question'+(questions.length===1?'':'s');
+  if (!filtered.length) { el.innerHTML='<div class="empty">'+(questions.length?'No questions in this assignment.':'No questions yet.')+'</div>'; return; }
   el.innerHTML='';
-  questions.forEach(function(q,i){
+  filtered.forEach(function(q,i){
     var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
-    var meta=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
+    var asgn=q.assignment||'General';
+    var typeDetail=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
+    var meta='<span style="background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
     var div=document.createElement('div');
     div.className='bank-item';
-    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+'</div><div class="bank-item-meta">'+tl[q.type]+' · '+meta+'</div></div><div class="bank-actions">'+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
+    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div></div><div class="bank-actions">'+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
     el.appendChild(div);
   });
 }
 
 function deleteQ(id) {
   questions=questions.filter(function(q){ return q.id!==id; });
+  saveQuestions();
   delete usedAttempts[id]; delete solved[id];
   renderBank(); renderStudentQuestions();
 }
@@ -1111,6 +1190,7 @@ function importQ(e) {
       if (data.questions&&Array.isArray(data.questions)) {
         questions=data.questions;
         nextId=Math.max.apply(null,questions.map(function(q){ return q.id; }))+1;
+        saveQuestions();
         resetStudentState(); renderBank(); renderStudentQuestions();
         alert('Imported '+questions.length+' questions.');
       }
@@ -1149,6 +1229,7 @@ function addEditAns() {
 function saveEditModal() {
   var q=questions.find(function(x){ return x.id===editModalQid; });
   if (q&&editModalAnswers.length>0) q.answers=editModalAnswers.slice();
+  saveQuestions();
   closeEditModal(); renderBank();
 }
 function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }

@@ -349,6 +349,11 @@ create policy "Teachers read all results" on student_results for select using (t
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
           Settings
         </div>
+        <div class="nav-section" style="margin-top:0.5rem;">Preview</div>
+        <div class="nav-item" id="nav-student-view" onclick="enterStudentView()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><ellipse cx="8" cy="8" rx="6" ry="4"/><circle cx="8" cy="8" r="1.8" fill="currentColor" stroke="none"/></svg>
+          Student view
+        </div>
       </div>
       <div class="sidebar-footer"><p id="sidebar-role-note"></p></div>
     </aside>
@@ -370,6 +375,10 @@ create policy "Teachers read all results" on student_results for select using (t
 
         <!-- QUESTIONS PANEL -->
         <div id="panel-questions" class="panel active">
+          <div id="student-view-banner" style="display:none; background:var(--amber-light); border:1px solid #e8d8a0; border-radius:var(--radius); padding:10px 16px; margin-bottom:1.25rem; display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <span style="font-size:13px; color:var(--amber); font-weight:500;">Student view — you are previewing what students see. Answers submitted here are not saved.</span>
+            <button class="btn btn-secondary btn-sm" onclick="exitStudentView()">Back to teacher view</button>
+          </div>
           <div class="score-grid">
             <div class="score-card"><div class="score-val" id="sc-correct">0</div><div class="score-lbl">Correct</div></div>
             <div class="score-card"><div class="score-val" id="sc-attempts">0</div><div class="score-lbl">Attempts</div></div>
@@ -724,6 +733,31 @@ function showApp() {
 }
 
 // ══════════════════════════════════════════
+//  STUDENT VIEW PREVIEW (teacher only)
+// ══════════════════════════════════════════
+var studentViewMode = false;
+
+function enterStudentView() {
+  studentViewMode = true;
+  document.getElementById('teacher-nav').style.display = 'none';
+  document.getElementById('student-nav').style.display = '';
+  var banner = document.getElementById('student-view-banner');
+  banner.style.display = 'flex';
+  resetStudentState();
+  renderStudentQuestions();
+  updateScore();
+  showPanel('questions', document.getElementById('nav-questions'));
+}
+
+function exitStudentView() {
+  studentViewMode = false;
+  document.getElementById('teacher-nav').style.display = '';
+  document.getElementById('student-nav').style.display = 'none';
+  document.getElementById('student-view-banner').style.display = 'none';
+  showPanel('dashboard', document.getElementById('nav-dashboard'));
+}
+
+// ══════════════════════════════════════════
 //  NAV
 // ══════════════════════════════════════════
 function showPanel(name, el) {
@@ -929,7 +963,7 @@ function updateScore() {
 //  SAVE RESULT TO SUPABASE
 // ══════════════════════════════════════════
 async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
-  if (!currentUser) return;
+  if (!currentUser || studentViewMode) return;
   var q=questions.find(function(x){ return x.id===qid; });
   var row = {
     student_id: currentUser.id,

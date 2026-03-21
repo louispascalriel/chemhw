@@ -716,7 +716,7 @@ async function doLogout() {
 // ══════════════════════════════════════════
 function showApp() {
   showScreen('app');
-  var isTeacher = currentProfile && currentProfile.role==='teacher';
+  var isTeacher = currentProfile && (currentProfile.role==='teacher' || currentProfile.username==='teacher' || currentProfile.username==='admin');
   document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
   document.getElementById('student-nav').style.display = isTeacher ? 'none' : '';
   var uname = currentProfile ? currentProfile.username : (currentUser ? currentUser.email : '?');

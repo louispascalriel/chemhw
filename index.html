@@ -243,6 +243,7 @@ sub { font-size: 0.72em; }
   username text unique not null,
   role text not null default 'student',
   class_code text,
+  email text,
   created_at timestamptz default now()
 );
 create table if not exists student_results (
@@ -263,8 +264,9 @@ create policy "Teachers read all profiles" on profiles for select using (true);
 create policy "Users read own results" on student_results for select using (auth.uid() = student_id);
 create policy "Users insert own results" on student_results for insert with check (auth.uid() = student_id);
 create policy "Teachers read all results" on student_results for select using (true);
--- If upgrading from an older version, run this to add the student_answer column:
--- alter table student_results add column if not exists student_answer text;</pre>
+-- If upgrading from an older version, run these migration lines:
+-- alter table student_results add column if not exists student_answer text;
+-- alter table profiles add column if not exists email text;</pre>
           <button class="btn btn-secondary btn-sm" onclick="copySQL()" style="margin-top:6px;">Copy SQL</button>
         </div>
       </div>
@@ -302,6 +304,7 @@ create policy "Teachers read all results" on student_results for select using (t
         <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="login-user" placeholder="your username" autocomplete="username"></div>
         <div class="form-group"><label class="form-label">Password</label><input class="form-input" type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password"></div>
         <button class="btn btn-primary" onclick="doLogin()" id="login-btn">Sign in</button>
+        <div style="text-align:right;margin-top:6px;"><a href="#" onclick="switchAuthTab('forgot');return false;" style="font-size:12px;color:var(--accent);">Forgot password?</a></div>
         <div class="auth-msg" id="login-msg"></div>
       </div>
 
@@ -309,10 +312,20 @@ create policy "Teachers read all results" on student_results for select using (t
       <div id="auth-register" style="display:none;">
         <div class="form-group"><label class="form-label">Class code</label><input class="form-input mono" id="reg-code" placeholder="e.g. CHEM101" style="text-transform:uppercase;"></div>
         <div class="form-group"><label class="form-label">Choose a username</label><input class="form-input" id="reg-user" placeholder="e.g. jsmith" autocomplete="username"></div>
+        <div class="form-group"><label class="form-label">Email <span style="font-weight:400;font-size:11px;text-transform:none;">(for password resets)</span></label><input class="form-input" type="email" id="reg-email" placeholder="you@example.com" autocomplete="email"></div>
         <div class="form-group"><label class="form-label">Password</label><input class="form-input" type="password" id="reg-pass" placeholder="At least 6 characters" autocomplete="new-password"></div>
         <div class="form-group"><label class="form-label">Confirm password</label><input class="form-input" type="password" id="reg-pass2" placeholder="Repeat password" autocomplete="new-password"></div>
         <button class="btn btn-primary" onclick="doRegister()" id="reg-btn">Create account</button>
         <div class="auth-msg" id="reg-msg"></div>
+      </div>
+
+      <!-- Forgot Password -->
+      <div id="auth-forgot" style="display:none;">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Enter your email and we'll send a password reset link.</p>
+        <div class="form-group"><label class="form-label">Email</label><input class="form-input" type="email" id="forgot-email" placeholder="you@example.com" autocomplete="email"></div>
+        <button class="btn btn-primary" onclick="doForgotPassword()" id="forgot-btn">Send reset link</button>
+        <div class="auth-msg" id="forgot-msg"></div>
+        <div style="margin-top:12px;text-align:center;"><a href="#" onclick="switchAuthTab('login');return false;" style="font-size:12px;color:var(--text2);">Back to sign in</a></div>
       </div>
     </div>
   </div>
@@ -646,6 +659,7 @@ function switchAuthTab(tab) {
   document.getElementById('tab-register').className = 'auth-tab'+(tab==='register'?' active':'');
   document.getElementById('auth-login').style.display    = tab==='login'    ? '' : 'none';
   document.getElementById('auth-register').style.display = tab==='register' ? '' : 'none';
+  document.getElementById('auth-forgot').style.display   = tab==='forgot'   ? '' : 'none';
 }
 
 function showAuthMsg(id, msg, type) {
@@ -658,7 +672,9 @@ async function doLogin() {
   if (!username||!pass) { showAuthMsg('login-msg','Please fill in all fields.','error'); return; }
   var btn = document.getElementById('login-btn');
   btn.disabled=true; btn.textContent='Signing in…';
-  var email = username+'.student@chemhw.edu';
+  // Look up real email from profiles (anon read), fall back to legacy fake email
+  var pr = await sbSelect('profiles', 'username=eq.'+encodeURIComponent(username)+'&select=email&limit=1');
+  var email = (pr.data && pr.data[0] && pr.data[0].email) || (username+'.student@chemhw.edu');
   var data = await sbSignIn(email, pass);
   btn.disabled=false; btn.textContent='Sign in';
   if (data.error || !data.access_token) { showAuthMsg('login-msg', 'Username or password incorrect.', 'error'); return; }
@@ -668,23 +684,35 @@ async function doLogin() {
   showApp();
 }
 
+async function doForgotPassword() {
+  var email = document.getElementById('forgot-email').value.trim();
+  if (!email) { showAuthMsg('forgot-msg','Please enter your email.','error'); return; }
+  var btn = document.getElementById('forgot-btn');
+  btn.disabled=true; btn.textContent='Sending…';
+  var r = await fetch(CFG.url+'/auth/v1/recover', { method:'POST', headers:{'Content-Type':'application/json','apikey':CFG.key}, body:JSON.stringify({email}) });
+  btn.disabled=false; btn.textContent='Send reset link';
+  if (r.ok) { showAuthMsg('forgot-msg','Reset link sent — check your inbox.','success'); }
+  else { showAuthMsg('forgot-msg','Could not send reset link. Check the email address.','error'); }
+}
+
 async function doRegister() {
   var code  = document.getElementById('reg-code').value.trim().toUpperCase();
   var uname = document.getElementById('reg-user').value.trim().toLowerCase();
+  var email = document.getElementById('reg-email').value.trim();
   var pass  = document.getElementById('reg-pass').value;
   var pass2 = document.getElementById('reg-pass2').value;
-  if (!code||!uname||!pass||!pass2) { showAuthMsg('reg-msg','Please fill in all fields.','error'); return; }
+  if (!code||!uname||!email||!pass||!pass2) { showAuthMsg('reg-msg','Please fill in all fields.','error'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showAuthMsg('reg-msg','Please enter a valid email address.','error'); return; }
   if (pass!==pass2) { showAuthMsg('reg-msg','Passwords do not match.','error'); return; }
   if (pass.length<6) { showAuthMsg('reg-msg','Password must be at least 6 characters.','error'); return; }
   if (code!==CFG.classCode) { showAuthMsg('reg-msg','Invalid class code. Ask your teacher for the correct code.','error'); return; }
   var btn=document.getElementById('reg-btn'); btn.disabled=true; btn.textContent='Creating account…';
-  var email = uname+'.student@chemhw.edu';
   var data = await sbSignUp(email, pass);
   var errMsg = data.error_description || data.msg || data.error?.message || data.message || JSON.stringify(data); if (data.error || data.error_description || !data.user) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg', errMsg,'error'); return; }
   var role = (uname==='teacher'||uname==='admin')?'teacher':'student';
   currentUser = data.user; currentUser.access_token = data.access_token;
   sbSaveSession(data);
-  var pe = await sbInsert('profiles', { id: data.user.id, username: uname, role, class_code: code });
+  var pe = await sbInsert('profiles', { id: data.user.id, username: uname, role, class_code: code, email });
   btn.disabled=false; btn.textContent='Create account';
   if (pe.error) { showAuthMsg('reg-msg','Account created but profile failed: '+(pe.error.message||JSON.stringify(pe.error)),'error'); return; }
   showAuthMsg('reg-msg','Account created! Signing you in…','success');
@@ -696,7 +724,7 @@ async function loadProfile(user) {
   currentProfile = (r.data && r.data[0]) || null;
   // Synthesize profile from email if DB read failed
   if (!currentProfile && user.email) {
-    var uname = user.email.split('.student@')[0];
+    var uname = user.email.includes('.student@chemhw.edu') ? user.email.split('.student@')[0] : user.email.split('@')[0];
     currentProfile = { id: user.id, username: uname, role: (uname==='teacher'||uname==='admin') ? 'teacher' : 'student' };
   }
   if (currentProfile && (currentProfile.username === 'teacher' || currentProfile.username === 'admin') && currentProfile.role !== 'teacher') {
@@ -721,7 +749,7 @@ async function doLogout() {
 // ══════════════════════════════════════════
 function showApp() {
   showScreen('app');
-  var emailUname = currentUser && currentUser.email ? currentUser.email.split('.student@')[0] : '';
+  var emailUname = currentUser && currentUser.email ? (currentUser.email.includes('.student@chemhw.edu') ? currentUser.email.split('.student@')[0] : currentUser.email.split('@')[0]) : '';
   var isTeacher = (currentProfile && (currentProfile.role==='teacher' || currentProfile.username==='teacher' || currentProfile.username==='admin')) || emailUname==='teacher' || emailUname==='admin';
   document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
   document.getElementById('student-nav').style.display = isTeacher ? 'none' : '';

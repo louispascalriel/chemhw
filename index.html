@@ -1125,7 +1125,7 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
 async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
   var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student');
-  var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000', sbHeadersAdmin());
+  var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000');
   var profiles = pr.data, results = rr.data;
   if (!profiles || !results) {
     var errDetail = (pr.error||rr.error) ? JSON.stringify(pr.error||rr.error) : 'Unknown error';

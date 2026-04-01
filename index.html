@@ -794,6 +794,10 @@ function showApp() {
     resetStudentState();
     renderBank();
     showStudentCategory('HW', document.getElementById('nav-hw'));
+    loadStudentProgress().then(function() {
+      renderStudentQuestions();
+      updateScore();
+    });
   }
 }
 
@@ -1039,10 +1043,44 @@ function updateScore() {
 }
 
 // ══════════════════════════════════════════
+//  SESSION REFRESH + PROGRESS RESTORE
+// ══════════════════════════════════════════
+async function maybeRefreshToken() {
+  if (!currentUser || !currentUser.access_token) return;
+  try {
+    var payload = JSON.parse(atob(currentUser.access_token.split('.')[1]));
+    if (payload.exp && payload.exp - Date.now()/1000 < 300) {
+      var session = await sbGetSession();
+      if (session && session.refresh_token) {
+        var r = await sbAuth('/token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+        if (r.access_token) { currentUser.access_token = r.access_token; sbSaveSession(r); }
+      }
+    }
+  } catch(e) {}
+}
+
+async function loadStudentProgress() {
+  if (!currentUser) return;
+  var rr = await sbSelect('student_results', 'student_id=eq.'+currentUser.id+'&order=answered_at.asc');
+  if (!rr.data || !rr.data.length) return;
+  var byQ = {};
+  rr.data.forEach(function(r) {
+    if (!byQ[r.question_id]) byQ[r.question_id] = [];
+    byQ[r.question_id].push(r);
+  });
+  Object.keys(byQ).forEach(function(qid) {
+    var attempts = byQ[qid];
+    usedAttempts[qid] = Math.max.apply(null, attempts.map(function(r){ return r.attempts_used||1; }));
+    if (attempts.some(function(r){ return r.correct; })) solved[qid] = true;
+  });
+}
+
+// ══════════════════════════════════════════
 //  SAVE RESULT TO SUPABASE
 // ══════════════════════════════════════════
 async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
   if (!currentUser || studentViewMode) return;
+  await maybeRefreshToken();
   var q=questions.find(function(x){ return x.id===qid; });
   var row = {
     student_id: currentUser.id,

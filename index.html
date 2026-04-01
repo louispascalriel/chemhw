@@ -108,6 +108,10 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .badge-calc { background: var(--amber-light); color: var(--amber); }
 .badge-teacher { background: #fff3cd; color: #856404; }
 .badge-student { background: var(--accent-light); color: var(--accent); }
+.badge-ice { background: var(--amber-light); color: var(--amber); }
+.badge-hw  { background: var(--accent-light); color: var(--accent); }
+.category-header { font-family: 'DM Serif Display', serif; font-size: 18px; color: var(--text); margin: 1.75rem 0 0.75rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.category-header:first-child { margin-top: 0; }
 
 /* ── STUDENT Q CARDS ── */
 .q-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
@@ -427,6 +431,7 @@ create policy "Teachers read all results" on student_results for select using (t
               <div class="type-tab" id="tt-calc" onclick="setBuilderType('calc')">Calculation</div>
             </div>
             <div class="form-group"><label class="form-label">Question text</label><textarea class="form-textarea" id="b-qtext" placeholder="Enter the question…"></textarea></div>
+            <div class="form-group"><label class="form-label">Category</label><div class="type-tabs" style="margin-bottom:0;"><div class="type-tab" id="cat-ice" onclick="setCategory('ICE')">ICE — In-Class</div><div class="type-tab active" id="cat-hw" onclick="setCategory('HW')">HW — Homework</div></div></div>
             <div class="form-group"><label class="form-label">Assignment <span style="font-weight:400;text-transform:none;font-size:11px;">(group questions into assignments for students)</span></label><input class="form-input" id="b-assignment" placeholder="e.g. Unit 3 Homework" list="assignment-datalist"><datalist id="assignment-datalist"></datalist></div>
             <div class="form-group">
               <label class="form-label">Attach image (optional)</label>
@@ -483,6 +488,7 @@ create policy "Teachers read all results" on student_results for select using (t
           <div class="card">
             <div class="card-header"><div class="card-title">Question bank</div><span style="font-size:13px;color:var(--text3);" id="bank-count">0 questions</span></div>
             <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
+              <select class="form-select" id="bank-cat-filter" onchange="renderBank()" style="width:auto;min-width:130px;font-size:13px;padding:5px 9px;"><option value="">All categories</option><option value="ICE">ICE</option><option value="HW">HW</option></select>
               <select class="form-select" id="bank-filter" onchange="renderBank()" style="width:auto;min-width:160px;font-size:13px;padding:5px 9px;"><option value="">All assignments</option></select>
               <button class="btn btn-secondary btn-sm" onclick="exportQ()">Export questions</button>
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-file').click()">Import questions</button>
@@ -817,11 +823,11 @@ function showPanel(name, el) {
 //  QUESTIONS DATA
 // ══════════════════════════════════════════
 var questions = [
-  { id:1, type:'formula', text:'What is the chemical formula for <strong>sulfuric acid</strong>?', answers:['h2so4'], hint:'Type plain text — subscripts auto-render in the preview.' },
-  { id:2, type:'formula', text:'Write the formula for the <strong>phosphate ion</strong>.', answers:['po4^3-','po43-'], hint:'Use ^ for charges: PO4^3-' },
-  { id:3, type:'sci', text:"Avogadro's number — how many particles per mole?", correctVal:6.022e23, tol:0.01 },
-  { id:4, type:'mc', text:'Which of the following is a <strong>covalent bond</strong>?', options:['NaCl','MgO','H₂O','KBr'], correct:2, explanation:'H₂O involves shared electrons between H and O — the hallmark of covalent bonding.' },
-  { id:5, type:'calc', text:'Calculate the molar mass of <strong>NaCl</strong>. (Na = 22.99, Cl = 35.45)', correctVal:58.44, unit:'g/mol', tol:0.02, hint:'Add the atomic masses of Na and Cl.' }
+  { id:1, type:'formula', text:'What is the chemical formula for <strong>sulfuric acid</strong>?', answers:['h2so4'], hint:'Type plain text — subscripts auto-render in the preview.', category:'ICE' },
+  { id:2, type:'formula', text:'Write the formula for the <strong>phosphate ion</strong>.', answers:['po4^3-','po43-'], hint:'Use ^ for charges: PO4^3-', category:'ICE' },
+  { id:3, type:'sci', text:"Avogadro's number — how many particles per mole?", correctVal:6.022e23, tol:0.01, category:'HW' },
+  { id:4, type:'mc', text:'Which of the following is a <strong>covalent bond</strong>?', options:['NaCl','MgO','H₂O','KBr'], correct:2, explanation:'H₂O involves shared electrons between H and O — the hallmark of covalent bonding.', category:'ICE' },
+  { id:5, type:'calc', text:'Calculate the molar mass of <strong>NaCl</strong>. (Na = 22.99, Cl = 35.45)', correctVal:58.44, unit:'g/mol', tol:0.02, hint:'Add the atomic masses of Na and Cl.', category:'HW' }
 ];
 var nextId = 6;
 var MAX=3, UNLIMITED=false;
@@ -848,49 +854,61 @@ function renderStudentQuestions() {
   var container = document.getElementById('student-questions');
   if (!questions.length) { container.innerHTML='<div class="empty">No questions yet — teacher will add some soon.</div>'; return; }
   container.innerHTML='';
-  questions.forEach(function(q,i) {
-    var div=document.createElement('div');
-    div.className='q-card'; div.id='qcard-'+q.id;
-    var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
-    var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
-    var figHtml='';
-    if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
-    if (q.tableData) {
-      figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
-      q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
-      figHtml+='</table></div>';
-    }
-    var body='';
-    if (q.type==='formula') {
-      body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
-          +'<div class="preview-render" id="sp-'+q.id+'"></div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
-    } else if (q.type==='sci') {
-      var tv=((q.tol||0.01)*100).toFixed(1);
-      body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
-          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
-    } else if (q.type==='mc') {
-      body='<div class="mc-options" id="mcopts-'+q.id+'">';
-      var letters=['A','B','C','D','E','F'];
-      (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
-      body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
-      if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
-    } else if (q.type==='calc') {
-      var cv=((q.tol||0.02)*100).toFixed(1);
-      body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
-          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
-    }
-    div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
-      +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
-      +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
-      +'<div class="result-msg" id="res-'+q.id+'"></div>';
-    container.appendChild(div);
-    updateAttemptUI(q.id);
+  var cats = [
+    { key:'ICE', label:'In-Class Exercises' },
+    { key:'HW',  label:'Homework' }
+  ];
+  cats.forEach(function(cat) {
+    var catQs = questions.filter(function(q){ return (q.category||'HW')===cat.key; });
+    if (!catQs.length) return;
+    var hdr = document.createElement('div');
+    hdr.className = 'category-header';
+    hdr.innerHTML = '<span class="badge badge-'+cat.key.toLowerCase()+'">'+cat.key+'</span> '+cat.label;
+    container.appendChild(hdr);
+    catQs.forEach(function(q,i) {
+      var div=document.createElement('div');
+      div.className='q-card'; div.id='qcard-'+q.id;
+      var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
+      var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+      var figHtml='';
+      if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
+      if (q.tableData) {
+        figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
+        q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
+        figHtml+='</table></div>';
+      }
+      var body='';
+      if (q.type==='formula') {
+        body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
+            +'<div class="preview-render" id="sp-'+q.id+'"></div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
+      } else if (q.type==='sci') {
+        var tv=((q.tol||0.01)*100).toFixed(1);
+        body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
+            +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+      } else if (q.type==='mc') {
+        body='<div class="mc-options" id="mcopts-'+q.id+'">';
+        var letters=['A','B','C','D','E','F'];
+        (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
+        body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
+        if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
+      } else if (q.type==='calc') {
+        var cv=((q.tol||0.02)*100).toFixed(1);
+        body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
+            +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+      }
+      div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
+        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
+        +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
+        +'<div class="result-msg" id="res-'+q.id+'"></div>';
+      container.appendChild(div);
+      updateAttemptUI(q.id);
+    });
   });
 }
 
@@ -1116,7 +1134,13 @@ function applySettings() {
 // ══════════════════════════════════════════
 //  BUILDER
 // ══════════════════════════════════════════
-var builderType='formula', mcOptCount=0;
+var builderType='formula', mcOptCount=0, builderCategory='HW';
+
+function setCategory(c) {
+  builderCategory=c;
+  document.getElementById('cat-ice').className='type-tab'+(c==='ICE'?' active':'');
+  document.getElementById('cat-hw').className ='type-tab'+(c==='HW' ?' active':'');
+}
 
 function setBuilderType(t) {
   builderType=t;
@@ -1174,7 +1198,7 @@ function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent
 function addQuestion() {
   var qtext=document.getElementById('b-qtext').value.trim();
   if (!qtext) { showBNote('Please enter a question.'); return; }
-  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General') };
+  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General'), category:builderCategory };
   var imgEl=document.getElementById('b-img-preview');
   if (imgEl.src&&imgEl.src!==window.location.href) { q.image=imgEl.src; q.imageCaption=document.getElementById('b-img-caption').value.trim(); }
   var tbl=getTableData(); if(tbl) q.tableData=tbl;
@@ -1218,6 +1242,7 @@ function resetBuilderForm() {
   clearImage(); clearTable();
   document.getElementById('mc-options-builder').innerHTML=''; mcOptCount=0;
   if (builderType==='mc') { addMCOpt();addMCOpt();addMCOpt();addMCOpt(); }
+  setCategory('HW');
 }
 
 // ══════════════════════════════════════════
@@ -1231,15 +1256,17 @@ function renderBank() {
   var currentFilter=filterEl?filterEl.value:'';
   if(filterEl){ filterEl.innerHTML='<option value="">All assignments</option>'+assignments.map(function(a){ return '<option value="'+a+'"'+(a===currentFilter?' selected':'')+'>'+a+'</option>'; }).join(''); }
   if(dlEl){ dlEl.innerHTML=assignments.map(function(a){ return '<option value="'+a+'">'; }).join(''); }
-  var filtered=currentFilter?questions.filter(function(q){ return (q.assignment||'General')===currentFilter; }):questions;
-  document.getElementById('bank-count').textContent=filtered.length+(currentFilter?' of '+questions.length:'')+' question'+(questions.length===1?'':'s');
+  var catFilter=(document.getElementById('bank-cat-filter')||{value:''}).value||'';
+  var filtered=questions.filter(function(q){ return (!currentFilter||(q.assignment||'General')===currentFilter)&&(!catFilter||(q.category||'HW')===catFilter); });
+  document.getElementById('bank-count').textContent=filtered.length+(currentFilter||catFilter?' of '+questions.length:'')+' question'+(questions.length===1?'':'s');
   if (!filtered.length) { el.innerHTML='<div class="empty">'+(questions.length?'No questions in this assignment.':'No questions yet.')+'</div>'; return; }
   el.innerHTML='';
   filtered.forEach(function(q,i){
     var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
     var asgn=q.assignment||'General';
+    var catKey=q.category||'HW';
     var typeDetail=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
-    var meta='<span style="background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
+    var meta='<span class="badge badge-'+catKey.toLowerCase()+'">'+catKey+'</span> <span style="background:var(--surface2);color:var(--text2);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
     var div=document.createElement('div');
     div.className='bank-item';
     div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div></div><div class="bank-actions">'+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';

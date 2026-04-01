@@ -347,9 +347,13 @@ create policy "Teachers read all results" on student_results for select using (t
       </div>
       <div id="student-nav">
       <div class="nav-section">Student</div>
-      <div class="nav-item" id="nav-questions" onclick="showPanel('questions',this)">
+      <div class="nav-item" id="nav-ice" onclick="showStudentCategory('ICE',this)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M3 5l5-3 5 3M3 11l5 3 5-3"/></svg>
+        In-Class (ICE)
+      </div>
+      <div class="nav-item" id="nav-hw" onclick="showStudentCategory('HW',this)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
-        Questions
+        Homework (HW)
       </div>
       </div>
       <div id="teacher-nav" style="display:none;">
@@ -774,10 +778,8 @@ function showApp() {
     showPanel('dashboard', document.getElementById('nav-dashboard'));
   } else {
     resetStudentState();
-    renderStudentQuestions();
-    updateScore();
     renderBank();
-    showPanel('questions', document.getElementById('nav-questions'));
+    showStudentCategory('HW', document.getElementById('nav-hw'));
   }
 }
 
@@ -793,9 +795,7 @@ function enterStudentView() {
   var banner = document.getElementById('student-view-banner');
   banner.style.display = 'flex';
   resetStudentState();
-  renderStudentQuestions();
-  updateScore();
-  showPanel('questions', document.getElementById('nav-questions'));
+  showStudentCategory('HW', document.getElementById('nav-hw'));
 }
 
 function exitStudentView() {
@@ -831,7 +831,8 @@ var questions = [
 ];
 var nextId = 6;
 var MAX=3, UNLIMITED=false;
-var usedAttempts={}, solved={}, scoreCorrect=0, scoreAttempts=0;
+var usedAttempts={}, solved={};
+var studentCategory='HW';
 
 // ══════════════════════════════════════════
 //  CHEM HELPERS
@@ -848,67 +849,66 @@ function normChem(s) { return s.replace(/\s/g,'').toLowerCase(); }
 // ══════════════════════════════════════════
 //  STUDENT VIEW
 // ══════════════════════════════════════════
-function resetStudentState() { usedAttempts={}; solved={}; scoreCorrect=0; scoreAttempts=0; }
+function resetStudentState() { usedAttempts={}; solved={}; }
+
+function showStudentCategory(cat, el) {
+  studentCategory=cat;
+  showPanel('questions', el);
+  document.getElementById('topbar-title').textContent = cat==='ICE' ? 'In-Class Exercises' : 'Homework';
+  renderStudentQuestions(); updateScore();
+}
 
 function renderStudentQuestions() {
   var container = document.getElementById('student-questions');
-  if (!questions.length) { container.innerHTML='<div class="empty">No questions yet — teacher will add some soon.</div>'; return; }
+  var catQs = questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
+  if (!catQs.length) {
+    container.innerHTML='<div class="empty">'+(studentCategory==='ICE'?'No ICE questions are available right now — check back during class.':'No homework questions yet.')+'</div>';
+    return;
+  }
   container.innerHTML='';
-  var cats = [
-    { key:'ICE', label:'In-Class Exercises' },
-    { key:'HW',  label:'Homework' }
-  ];
-  cats.forEach(function(cat) {
-    var catQs = questions.filter(function(q){ return (q.category||'HW')===cat.key && !q.hidden; });
-    if (!catQs.length) return;
-    var hdr = document.createElement('div');
-    hdr.className = 'category-header';
-    hdr.innerHTML = '<span class="badge badge-'+cat.key.toLowerCase()+'">'+cat.key+'</span> '+cat.label;
-    container.appendChild(hdr);
-    catQs.forEach(function(q,i) {
-      var div=document.createElement('div');
-      div.className='q-card'; div.id='qcard-'+q.id;
-      var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
-      var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
-      var figHtml='';
-      if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
-      if (q.tableData) {
-        figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
-        q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
-        figHtml+='</table></div>';
-      }
-      var body='';
-      if (q.type==='formula') {
-        body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
-            +'<div class="preview-render" id="sp-'+q.id+'"></div>'
-            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
-      } else if (q.type==='sci') {
-        var tv=((q.tol||0.01)*100).toFixed(1);
-        body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
-            +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
-            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
-      } else if (q.type==='mc') {
-        body='<div class="mc-options" id="mcopts-'+q.id+'">';
-        var letters=['A','B','C','D','E','F'];
-        (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
-        body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
-        if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
-      } else if (q.type==='calc') {
-        var cv=((q.tol||0.02)*100).toFixed(1);
-        body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
-            +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
-            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
-      }
-      div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
-        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
-        +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
-        +'<div class="result-msg" id="res-'+q.id+'"></div>';
-      container.appendChild(div);
-      updateAttemptUI(q.id);
-    });
+  catQs.forEach(function(q,i) {
+    var div=document.createElement('div');
+    div.className='q-card'; div.id='qcard-'+q.id;
+    var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
+    var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+    var figHtml='';
+    if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
+    if (q.tableData) {
+      figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
+      q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
+      figHtml+='</table></div>';
+    }
+    var body='';
+    if (q.type==='formula') {
+      body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
+          +'<div class="preview-render" id="sp-'+q.id+'"></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
+    } else if (q.type==='sci') {
+      var tv=((q.tol||0.01)*100).toFixed(1);
+      body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
+          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+    } else if (q.type==='mc') {
+      body='<div class="mc-options" id="mcopts-'+q.id+'">';
+      var letters=['A','B','C','D','E','F'];
+      (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
+      body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
+      if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
+    } else if (q.type==='calc') {
+      var cv=((q.tol||0.02)*100).toFixed(1);
+      body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
+          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
+          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+    }
+    div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
+      +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
+      +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
+      +'<div class="result-msg" id="res-'+q.id+'"></div>';
+    container.appendChild(div);
+    updateAttemptUI(q.id);
   });
 }
 
@@ -970,11 +970,10 @@ function checkCalc(qid,correctVal) {
 
 function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
   usedAttempts[qid]=(usedAttempts[qid]||0)+1;
-  scoreAttempts++;
   var el=document.getElementById('res-'+qid);
   saveResult(qid, ok, usedAttempts[qid], studentAnswer);
   if (ok) {
-    solved[qid]=true; scoreCorrect++;
+    solved[qid]=true;
     el.className='result-msg correct'; el.innerHTML=successMsg||'Correct!';
     lockQ(qid);
   } else {
@@ -1013,11 +1012,14 @@ function updateAttemptUI(qid) {
 }
 
 function updateScore() {
-  var visibleQs=questions.filter(function(q){ return !q.hidden; });
-  var unsolved=visibleQs.length-Object.keys(solved).filter(function(k){ return solved[k]&&visibleQs.some(function(q){ return String(q.id)===k; }); }).length;
-  document.getElementById('sc-correct').textContent=scoreCorrect;
-  document.getElementById('sc-attempts').textContent=scoreAttempts;
-  document.getElementById('sc-pct').textContent=scoreAttempts>0?Math.round(scoreCorrect/scoreAttempts*100)+'%':'—';
+  var visibleQs=questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
+  var catIds=visibleQs.map(function(q){ return String(q.id); });
+  var catCorrect=catIds.filter(function(k){ return solved[k]; }).length;
+  var catAttempts=catIds.reduce(function(s,k){ return s+(usedAttempts[k]||0); },0);
+  var unsolved=visibleQs.length-catCorrect;
+  document.getElementById('sc-correct').textContent=catCorrect;
+  document.getElementById('sc-attempts').textContent=catAttempts;
+  document.getElementById('sc-pct').textContent=catAttempts>0?Math.round(catCorrect/catAttempts*100)+'%':'—';
   document.getElementById('sc-left').textContent=unsolved;
 }
 

@@ -515,6 +515,16 @@ create policy "Teachers read all results" on student_results for select using (t
             </div>
           </div>
           <div class="card" style="margin-top:1rem;">
+            <div class="card-title" style="margin-bottom:0.5rem;">Admin access</div>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Add your Supabase <strong>Service Role Key</strong> so the teacher dashboard can read all student results. Find it under <em>Project Settings → API → service_role</em>.</p>
+            <div class="settings-bar" style="margin:0 0 8px;">
+              <input class="form-input" id="service-key-input" type="password" placeholder="eyJhbGci… (service_role key)" style="flex:1;font-family:'DM Mono',monospace;font-size:12px;" value="">
+              <button class="btn btn-primary btn-sm" onclick="saveServiceKey()">Save</button>
+              <span style="font-size:12px;color:var(--text3);" id="service-key-note"></span>
+            </div>
+            <p style="font-size:11px;color:var(--text3);">Keep this key private — do not share the deployed URL with students while this key is stored in browser settings.</p>
+          </div>
+          <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Deployment</div>
             <p style="font-size:14px;color:var(--text2);line-height:1.7;">To share this with students, upload <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">chemistry-hw.html</code> to <a href="https://vercel.com" target="_blank" style="color:var(--accent);">Vercel</a> or <a href="https://netlify.com" target="_blank" style="color:var(--accent);">Netlify</a> — both are free and take under 2 minutes. Students visit the URL, register with your class code, and their results are saved to Supabase automatically.</p>
           </div>
@@ -547,7 +557,7 @@ create policy "Teachers read all results" on student_results for select using (t
 // ══════════════════════════════════════════
 //  CONFIG  —  filled on setup or from localStorage
 // ══════════════════════════════════════════
-var CFG = { url:'', key:'', classCode:'' };
+var CFG = { url:'', key:'', classCode:'', serviceKey:'' };
 var currentUser = null;
 var currentProfile = null;
 
@@ -562,15 +572,19 @@ function saveQuestions() { localStorage.setItem('chemhw_questions', JSON.stringi
 function sbHeaders() {
   return { 'Content-Type': 'application/json', 'apikey': CFG.key, 'Authorization': 'Bearer ' + (currentUser ? currentUser.access_token : CFG.key) };
 }
+function sbHeadersAdmin() {
+  var k = CFG.serviceKey || (currentUser ? currentUser.access_token : CFG.key);
+  return { 'Content-Type': 'application/json', 'apikey': CFG.serviceKey || CFG.key, 'Authorization': 'Bearer ' + k };
+}
 async function sbAuth(path, body) {
   var r = await fetch(CFG.url + '/auth/v1' + path, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey': CFG.key }, body: JSON.stringify(body) });
   var json = await r.json();
   if (!r.ok) console.error('sbAuth error', path, r.status, JSON.stringify(json));
   return json;
 }
-async function sbSelect(table, filter) {
+async function sbSelect(table, filter, hdrs) {
   var url = CFG.url + '/rest/v1/' + table + '?' + (filter||'');
-  var r = await fetch(url, { headers: sbHeaders() });
+  var r = await fetch(url, { headers: hdrs || sbHeaders() });
   if (!r.ok) { var e = await r.json(); return { data: null, error: e }; }
   return { data: await r.json(), error: null };
 }
@@ -817,6 +831,7 @@ function showPanel(name, el) {
   var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', settings:'Settings' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
+  if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
 }
 
 // ══════════════════════════════════════════
@@ -1039,9 +1054,13 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
   };
   var result = await sbInsert('student_results', row);
   if (result.error) {
-    // Retry without student_answer in case column doesn't exist in old schema
     delete row.student_answer;
-    await sbInsert('student_results', row);
+    var retry = await sbInsert('student_results', row);
+    if (retry.error) {
+      console.error('ChemHW: failed to save result for Q'+qid, retry.error);
+      var warn = document.getElementById('res-'+qid);
+      if (warn) warn.insertAdjacentHTML('beforeend','<div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Could not save — your answer may not appear for the teacher. Try refreshing and resubmitting.</div>');
+    }
   }
 }
 
@@ -1050,14 +1069,18 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
 // ══════════════════════════════════════════
 async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
-  var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student');
-  var rr = await sbSelect('student_results', 'order=answered_at.asc');
+  var adm = sbHeadersAdmin();
+  var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student', adm);
+  var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000', adm);
   var profiles = pr.data, results = rr.data;
-  if (!profiles||!results) { document.getElementById('dashboard-content').innerHTML='<div class="empty">Could not load data.</div>'; return; }
+  if (!profiles || !results) {
+    var errDetail = (pr.error||rr.error) ? JSON.stringify(pr.error||rr.error) : 'Unknown error';
+    var hint = !CFG.serviceKey ? ' <br><small>Tip: add your Supabase <strong>Service Role Key</strong> in Settings → Admin access so the teacher account can read all student data.</small>' : '';
+    document.getElementById('dashboard-content').innerHTML='<div class="empty">Could not load data: '+errDetail+hint+'</div>'; return;
+  }
   if (!profiles.length) { document.getElementById('dashboard-content').innerHTML='<div class="empty">No students have registered yet.</div>'; return; }
 
-  var totalQs = questions.length;
-  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Score</th><th>% of total</th><th></th></tr></thead><tbody>';
+  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Correct</th><th>Success rate</th><th></th></tr></thead><tbody>';
   profiles.forEach(function(p) {
     var pResults = results.filter(function(r){ return r.student_id===p.id; });
     // Group attempts by question_id, preserving order
@@ -1068,12 +1091,13 @@ async function loadDashboard() {
     });
     var qIds = Object.keys(byQ);
     var correctQs = qIds.filter(function(qid){ return byQ[qid].some(function(r){ return r.correct; }); }).length;
-    var pct = totalQs>0 ? Math.round(correctQs/totalQs*100) : 0;
+    var attemptedQs = qIds.length;
+    var pct = attemptedQs>0 ? Math.round(correctQs/attemptedQs*100) : 0;
     var fillColor = pct>=80?'var(--green)':pct>=50?'#d4881e':'var(--red)';
 
     html+='<tr style="cursor:pointer;" onclick="toggleDetail(\'det-'+p.id+'\')">'
       +'<td style="font-weight:500;">'+p.username+'</td>'
-      +'<td>'+correctQs+' / '+totalQs+'</td>'
+      +'<td>'+correctQs+' / '+attemptedQs+' attempted</td>'
       +'<td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill" style="width:'+pct+'%;background:'+fillColor+';"></div></div><span style="font-size:13px;min-width:34px;">'+pct+'%</span></div></td>'
       +'<td style="font-size:12px;color:var(--text3);white-space:nowrap;">▶ details</td>'
       +'</tr>';
@@ -1125,6 +1149,13 @@ function toggleDetail(id) {
 // ══════════════════════════════════════════
 //  SETTINGS
 // ══════════════════════════════════════════
+function saveServiceKey() {
+  CFG.serviceKey = document.getElementById('service-key-input').value.trim();
+  saveCFG();
+  var n=document.getElementById('service-key-note');
+  n.textContent = CFG.serviceKey ? 'Saved — refresh the dashboard to reload results.' : 'Cleared.';
+  setTimeout(function(){ n.textContent=''; }, 3000);
+}
 function toggleUnlim(chk) { document.getElementById('max-input').disabled=chk.checked; }
 function applySettings() {
   UNLIMITED=document.getElementById('unlim-chk').checked;

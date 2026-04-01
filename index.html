@@ -511,14 +511,6 @@ create policy "Teachers read all results" on student_results for select using (t
             </div>
           </div>
           <div class="card" style="margin-top:1rem;">
-            <div class="card-title" style="margin-bottom:1rem;">Assignment visibility</div>
-            <div class="settings-bar" style="margin:0 0 10px;">
-              <label class="unlim-label"><input type="checkbox" id="ice-visible-chk" onchange="applyICEVisibility(this)"> Show ICE questions to students</label>
-              <span style="font-size:12px;color:var(--text3);" id="ice-visibility-note"></span>
-            </div>
-            <p style="font-size:13px;color:var(--text2);">When unchecked, students only see Homework (HW) questions. Toggle this on during class to reveal ICE exercises.</p>
-          </div>
-          <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Deployment</div>
             <p style="font-size:14px;color:var(--text2);line-height:1.7;">To share this with students, upload <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">chemistry-hw.html</code> to <a href="https://vercel.com" target="_blank" style="color:var(--accent);">Vercel</a> or <a href="https://netlify.com" target="_blank" style="color:var(--accent);">Netlify</a> — both are free and take under 2 minutes. Students visit the URL, register with your class code, and their results are saved to Supabase automatically.</p>
           </div>
@@ -551,7 +543,7 @@ create policy "Teachers read all results" on student_results for select using (t
 // ══════════════════════════════════════════
 //  CONFIG  —  filled on setup or from localStorage
 // ══════════════════════════════════════════
-var CFG = { url:'', key:'', classCode:'', showICE: false };
+var CFG = { url:'', key:'', classCode:'' };
 var currentUser = null;
 var currentProfile = null;
 
@@ -825,17 +817,16 @@ function showPanel(name, el) {
   var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', settings:'Settings' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
-  if (name==='settings') { var chk=document.getElementById('ice-visible-chk'); if(chk) chk.checked=!!CFG.showICE; }
 }
 
 // ══════════════════════════════════════════
 //  QUESTIONS DATA
 // ══════════════════════════════════════════
 var questions = [
-  { id:1, type:'formula', text:'What is the chemical formula for <strong>sulfuric acid</strong>?', answers:['h2so4'], hint:'Type plain text — subscripts auto-render in the preview.', category:'ICE' },
-  { id:2, type:'formula', text:'Write the formula for the <strong>phosphate ion</strong>.', answers:['po4^3-','po43-'], hint:'Use ^ for charges: PO4^3-', category:'ICE' },
+  { id:1, type:'formula', text:'What is the chemical formula for <strong>sulfuric acid</strong>?', answers:['h2so4'], hint:'Type plain text — subscripts auto-render in the preview.', category:'ICE', hidden:true },
+  { id:2, type:'formula', text:'Write the formula for the <strong>phosphate ion</strong>.', answers:['po4^3-','po43-'], hint:'Use ^ for charges: PO4^3-', category:'ICE', hidden:true },
   { id:3, type:'sci', text:"Avogadro's number — how many particles per mole?", correctVal:6.022e23, tol:0.01, category:'HW' },
-  { id:4, type:'mc', text:'Which of the following is a <strong>covalent bond</strong>?', options:['NaCl','MgO','H₂O','KBr'], correct:2, explanation:'H₂O involves shared electrons between H and O — the hallmark of covalent bonding.', category:'ICE' },
+  { id:4, type:'mc', text:'Which of the following is a <strong>covalent bond</strong>?', options:['NaCl','MgO','H₂O','KBr'], correct:2, explanation:'H₂O involves shared electrons between H and O — the hallmark of covalent bonding.', category:'ICE', hidden:true },
   { id:5, type:'calc', text:'Calculate the molar mass of <strong>NaCl</strong>. (Na = 22.99, Cl = 35.45)', correctVal:58.44, unit:'g/mol', tol:0.02, hint:'Add the atomic masses of Na and Cl.', category:'HW' }
 ];
 var nextId = 6;
@@ -868,8 +859,7 @@ function renderStudentQuestions() {
     { key:'HW',  label:'Homework' }
   ];
   cats.forEach(function(cat) {
-    if (cat.key==='ICE' && !CFG.showICE) return;
-    var catQs = questions.filter(function(q){ return (q.category||'HW')===cat.key; });
+    var catQs = questions.filter(function(q){ return (q.category||'HW')===cat.key && !q.hidden; });
     if (!catQs.length) return;
     var hdr = document.createElement('div');
     hdr.className = 'category-header';
@@ -1023,7 +1013,7 @@ function updateAttemptUI(qid) {
 }
 
 function updateScore() {
-  var visibleQs=questions.filter(function(q){ return CFG.showICE||(q.category||'HW')!=='ICE'; });
+  var visibleQs=questions.filter(function(q){ return !q.hidden; });
   var unsolved=visibleQs.length-Object.keys(solved).filter(function(k){ return solved[k]&&visibleQs.some(function(q){ return String(q.id)===k; }); }).length;
   document.getElementById('sc-correct').textContent=scoreCorrect;
   document.getElementById('sc-attempts').textContent=scoreAttempts;
@@ -1134,13 +1124,6 @@ function toggleDetail(id) {
 //  SETTINGS
 // ══════════════════════════════════════════
 function toggleUnlim(chk) { document.getElementById('max-input').disabled=chk.checked; }
-function applyICEVisibility(chk) {
-  CFG.showICE=chk.checked; saveCFG();
-  var n=document.getElementById('ice-visibility-note');
-  n.textContent=CFG.showICE?'ICE questions are now visible to students.':'ICE questions are now hidden from students.';
-  setTimeout(function(){ n.textContent=''; },2500);
-  renderStudentQuestions(); updateScore();
-}
 function applySettings() {
   UNLIMITED=document.getElementById('unlim-chk').checked;
   if (!UNLIMITED) { var v=parseInt(document.getElementById('max-input').value); MAX=(isNaN(v)||v<1)?1:v; document.getElementById('max-input').value=MAX; }
@@ -1216,7 +1199,7 @@ function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent
 function addQuestion() {
   var qtext=document.getElementById('b-qtext').value.trim();
   if (!qtext) { showBNote('Please enter a question.'); return; }
-  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General'), category:builderCategory };
+  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General'), category:builderCategory, hidden:builderCategory==='ICE' };
   var imgEl=document.getElementById('b-img-preview');
   if (imgEl.src&&imgEl.src!==window.location.href) { q.image=imgEl.src; q.imageCaption=document.getElementById('b-img-caption').value.trim(); }
   var tbl=getTableData(); if(tbl) q.tableData=tbl;
@@ -1285,13 +1268,21 @@ function renderBank() {
     var catKey=q.category||'HW';
     var typeDetail=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
     var meta='<span class="badge badge-'+catKey.toLowerCase()+'">'+catKey+'</span> <span style="background:var(--surface2);color:var(--text2);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
+    var isICE=catKey==='ICE';
+    var visBtn=isICE?'<button class="btn btn-secondary btn-sm" onclick="toggleQVisibility('+q.id+')">'+(q.hidden?'Show to students':'Hide from students')+'</button>':'';
+    var hiddenNote=isICE&&q.hidden?' <span style="font-size:11px;color:var(--text3);font-style:italic;">(hidden)</span>':'';
     var div=document.createElement('div');
-    div.className='bank-item';
-    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div></div><div class="bank-actions">'+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
+    div.className='bank-item'; if(isICE&&q.hidden) div.style.opacity='0.55';
+    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+hiddenNote+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div></div><div class="bank-actions">'+visBtn+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
     el.appendChild(div);
   });
 }
 
+function toggleQVisibility(id) {
+  var q=questions.find(function(x){ return x.id===id; }); if(!q) return;
+  q.hidden=!q.hidden;
+  saveQuestions(); renderBank(); renderStudentQuestions(); updateScore();
+}
 function deleteQ(id) {
   questions=questions.filter(function(q){ return q.id!==id; });
   saveQuestions();

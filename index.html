@@ -1069,9 +1069,8 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
 // ══════════════════════════════════════════
 async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
-  var adm = sbHeadersAdmin();
-  var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student', adm);
-  var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000', adm);
+  var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student');
+  var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000', sbHeadersAdmin());
   var profiles = pr.data, results = rr.data;
   if (!profiles || !results) {
     var errDetail = (pr.error||rr.error) ? JSON.stringify(pr.error||rr.error) : 'Unknown error';

@@ -511,6 +511,14 @@ create policy "Teachers read all results" on student_results for select using (t
             </div>
           </div>
           <div class="card" style="margin-top:1rem;">
+            <div class="card-title" style="margin-bottom:1rem;">Assignment visibility</div>
+            <div class="settings-bar" style="margin:0 0 10px;">
+              <label class="unlim-label"><input type="checkbox" id="ice-visible-chk" onchange="applyICEVisibility(this)"> Show ICE questions to students</label>
+              <span style="font-size:12px;color:var(--text3);" id="ice-visibility-note"></span>
+            </div>
+            <p style="font-size:13px;color:var(--text2);">When unchecked, students only see Homework (HW) questions. Toggle this on during class to reveal ICE exercises.</p>
+          </div>
+          <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Deployment</div>
             <p style="font-size:14px;color:var(--text2);line-height:1.7;">To share this with students, upload <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">chemistry-hw.html</code> to <a href="https://vercel.com" target="_blank" style="color:var(--accent);">Vercel</a> or <a href="https://netlify.com" target="_blank" style="color:var(--accent);">Netlify</a> — both are free and take under 2 minutes. Students visit the URL, register with your class code, and their results are saved to Supabase automatically.</p>
           </div>
@@ -543,7 +551,7 @@ create policy "Teachers read all results" on student_results for select using (t
 // ══════════════════════════════════════════
 //  CONFIG  —  filled on setup or from localStorage
 // ══════════════════════════════════════════
-var CFG = { url:'', key:'', classCode:'' };
+var CFG = { url:'', key:'', classCode:'', showICE: false };
 var currentUser = null;
 var currentProfile = null;
 
@@ -817,6 +825,7 @@ function showPanel(name, el) {
   var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', settings:'Settings' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
+  if (name==='settings') { var chk=document.getElementById('ice-visible-chk'); if(chk) chk.checked=!!CFG.showICE; }
 }
 
 // ══════════════════════════════════════════
@@ -859,6 +868,7 @@ function renderStudentQuestions() {
     { key:'HW',  label:'Homework' }
   ];
   cats.forEach(function(cat) {
+    if (cat.key==='ICE' && !CFG.showICE) return;
     var catQs = questions.filter(function(q){ return (q.category||'HW')===cat.key; });
     if (!catQs.length) return;
     var hdr = document.createElement('div');
@@ -1013,7 +1023,8 @@ function updateAttemptUI(qid) {
 }
 
 function updateScore() {
-  var unsolved=questions.length-Object.keys(solved).filter(function(k){ return solved[k]; }).length;
+  var visibleQs=questions.filter(function(q){ return CFG.showICE||(q.category||'HW')!=='ICE'; });
+  var unsolved=visibleQs.length-Object.keys(solved).filter(function(k){ return solved[k]&&visibleQs.some(function(q){ return String(q.id)===k; }); }).length;
   document.getElementById('sc-correct').textContent=scoreCorrect;
   document.getElementById('sc-attempts').textContent=scoreAttempts;
   document.getElementById('sc-pct').textContent=scoreAttempts>0?Math.round(scoreCorrect/scoreAttempts*100)+'%':'—';
@@ -1123,6 +1134,13 @@ function toggleDetail(id) {
 //  SETTINGS
 // ══════════════════════════════════════════
 function toggleUnlim(chk) { document.getElementById('max-input').disabled=chk.checked; }
+function applyICEVisibility(chk) {
+  CFG.showICE=chk.checked; saveCFG();
+  var n=document.getElementById('ice-visibility-note');
+  n.textContent=CFG.showICE?'ICE questions are now visible to students.':'ICE questions are now hidden from students.';
+  setTimeout(function(){ n.textContent=''; },2500);
+  renderStudentQuestions(); updateScore();
+}
 function applySettings() {
   UNLIMITED=document.getElementById('unlim-chk').checked;
   if (!UNLIMITED) { var v=parseInt(document.getElementById('max-input').value); MAX=(isNaN(v)||v<1)?1:v; document.getElementById('max-input').value=MAX; }

@@ -268,6 +268,10 @@ create policy "Teachers read all profiles" on profiles for select using (true);
 create policy "Users read own results" on student_results for select using (auth.uid() = student_id);
 create policy "Users insert own results" on student_results for insert with check (auth.uid() = student_id);
 create policy "Teachers read all results" on student_results for select using (true);
+grant usage on schema public to anon, authenticated;
+grant select, update on profiles to authenticated;
+grant select on profiles to anon;
+grant select, insert on student_results to authenticated;
 -- If upgrading from an older version, run these migration lines:
 -- alter table student_results add column if not exists student_answer text;
 -- alter table profiles add column if not exists email text;</pre>
@@ -513,6 +517,15 @@ create policy "Teachers read all results" on student_results for select using (t
               <button class="btn btn-primary btn-sm" onclick="applySettings()">Apply &amp; reset</button>
               <span style="font-size:12px;color:var(--text3);" id="settings-note"></span>
             </div>
+          </div>
+          <div class="card" style="margin-top:1rem;">
+            <div class="card-title" style="margin-bottom:0.5rem;">Fix permissions (migration)</div>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">If students see a "Could not save" error, your Supabase tables are missing role grants. Run this in your <em>Supabase SQL Editor</em>:</p>
+            <pre id="fix-sql" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'DM Mono',monospace;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--text);margin-bottom:8px;">grant usage on schema public to anon, authenticated;
+grant select, update on profiles to authenticated;
+grant select on profiles to anon;
+grant select, insert on student_results to authenticated;</pre>
+            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('fix-sql').textContent)">Copy SQL</button>
           </div>
           <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Admin access</div>
@@ -1097,8 +1110,9 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
     var retry = await sbInsert('student_results', row);
     if (retry.error) {
       console.error('ChemHW: failed to save result for Q'+qid, retry.error);
+      var errCode = retry.error.code || retry.error.message || JSON.stringify(retry.error);
       var warn = document.getElementById('res-'+qid);
-      if (warn) warn.insertAdjacentHTML('beforeend','<div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Could not save — your answer may not appear for the teacher. Try refreshing and resubmitting.</div>');
+      if (warn) warn.insertAdjacentHTML('beforeend','<div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Could not save ('+errCode+') — your answer may not appear for the teacher.</div>');
     }
   }
 }

@@ -794,6 +794,7 @@ function showApp() {
     resetStudentState();
     renderBank();
     showStudentCategory('HW', document.getElementById('nav-hw'));
+    document.getElementById('student-questions').innerHTML='<div class="loading">Loading your progress…</div>';
     loadStudentProgress().then(function() {
       renderStudentQuestions();
       updateScore();

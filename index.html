@@ -99,6 +99,16 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .score-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; text-align: center; }
 .score-val { font-family: 'DM Serif Display', serif; font-size: 28px; color: var(--text); line-height: 1; }
 .score-lbl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text3); margin-top: 4px; }
+/* ── ASSIGNMENT LIST ── */
+.assignment-list { display: flex; flex-direction: column; gap: 10px; }
+.assignment-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 20px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.15s, box-shadow 0.15s; }
+.assignment-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(45,90,142,0.1); }
+.assignment-card-name { font-size: 15px; font-weight: 600; color: var(--text); }
+.assignment-card-meta { font-size: 12px; color: var(--text3); margin-top: 3px; }
+.assignment-card-right { display: flex; align-items: center; gap: 14px; }
+.assignment-card-progress { font-size: 13px; font-weight: 600; color: var(--accent); }
+.assignment-back { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; }
+.assignment-back-title { font-size: 16px; font-weight: 600; color: var(--text); }
 
 /* ── BADGES ── */
 .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px; }
@@ -868,6 +878,7 @@ var nextId = 6;
 var MAX=3, UNLIMITED=false;
 var usedAttempts={}, solved={};
 var studentCategory='HW';
+var studentAssignment=null;
 
 // ══════════════════════════════════════════
 //  CHEM HELPERS
@@ -888,19 +899,67 @@ function resetStudentState() { usedAttempts={}; solved={}; }
 
 function showStudentCategory(cat, el) {
   studentCategory=cat;
+  studentAssignment=null;
   showPanel('questions', el);
   document.getElementById('topbar-title').textContent = cat==='ICE' ? 'In-Class Exercises' : 'Homework';
+  renderStudentQuestions(); updateScore();
+}
+
+function showAssignment(name) {
+  studentAssignment=name;
+  renderStudentQuestions(); updateScore();
+}
+
+function backToAssignments() {
+  studentAssignment=null;
   renderStudentQuestions(); updateScore();
 }
 
 function renderStudentQuestions() {
   var container = document.getElementById('student-questions');
   var catQs = questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
+
+  // HW: show assignment picker when no assignment is selected
+  if (studentCategory==='HW' && studentAssignment===null) {
+    if (!catQs.length) {
+      container.innerHTML='<div class="empty">No homework questions yet.</div>';
+      return;
+    }
+    var aMap={};
+    catQs.forEach(function(q){ var a=q.assignment||'General'; if(!aMap[a]) aMap[a]=[]; aMap[a].push(q); });
+    var html='<div class="assignment-list">';
+    Object.keys(aMap).forEach(function(name){
+      var qs=aMap[name], total=qs.length, correct=qs.filter(function(q){ return solved[String(q.id)]; }).length;
+      var allDone=correct===total;
+      html+='<div class="assignment-card" onclick="showAssignment(\''+name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
+        +'<div><div class="assignment-card-name">'+name+'</div><div class="assignment-card-meta">'+total+' question'+(total!==1?'s':'')+'</div></div>'
+        +'<div class="assignment-card-right"><span class="assignment-card-progress" style="'+(allDone?'color:var(--green,#2e7d32)':'')+'">'+correct+' / '+total+' correct</span><span style="color:var(--text3);font-size:20px;line-height:1;">›</span></div>'
+        +'</div>';
+    });
+    html+='</div>';
+    container.innerHTML=html;
+    return;
+  }
+
+  // HW: filter to selected assignment
+  if (studentCategory==='HW' && studentAssignment!==null) {
+    catQs=catQs.filter(function(q){ return (q.assignment||'General')===studentAssignment; });
+  }
+
   if (!catQs.length) {
-    container.innerHTML='<div class="empty">'+(studentCategory==='ICE'?'No ICE questions are available right now — check back during class.':'No homework questions yet.')+'</div>';
+    container.innerHTML=(studentCategory==='HW'?'<div class="assignment-back"><button class="btn btn-secondary btn-sm" onclick="backToAssignments()">← Assignments</button></div>':'')
+      +'<div class="empty">'+(studentCategory==='ICE'?'No ICE questions are available right now — check back during class.':'No questions in this assignment yet.')+'</div>';
     return;
   }
   container.innerHTML='';
+
+  // Back button + title for HW assignment view
+  if (studentCategory==='HW') {
+    var backDiv=document.createElement('div');
+    backDiv.className='assignment-back';
+    backDiv.innerHTML='<button class="btn btn-secondary btn-sm" onclick="backToAssignments()">← Assignments</button><span class="assignment-back-title">'+studentAssignment+'</span>';
+    container.appendChild(backDiv);
+  }
   catQs.forEach(function(q,i) {
     var div=document.createElement('div');
     div.className='q-card'; div.id='qcard-'+q.id;
@@ -1048,6 +1107,9 @@ function updateAttemptUI(qid) {
 
 function updateScore() {
   var visibleQs=questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
+  if (studentCategory==='HW' && studentAssignment!==null) {
+    visibleQs=visibleQs.filter(function(q){ return (q.assignment||'General')===studentAssignment; });
+  }
   var catIds=visibleQs.map(function(q){ return String(q.id); });
   var catCorrect=catIds.filter(function(k){ return solved[k]; }).length;
   var catAttempts=catIds.reduce(function(s,k){ return s+(usedAttempts[k]||0); },0);

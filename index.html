@@ -1461,7 +1461,10 @@ function renderAssignmentList(el) {
     +'<div class="type-tab'+(newAsgnCategory==='HW'?' active':'')+'" id="new-asgn-hw" onclick="setNewAsgnCat(\'HW\')">HW — Homework</div>'
     +'<div class="type-tab'+(newAsgnCategory==='ICE'?' active':'')+'" id="new-asgn-ice" onclick="setNewAsgnCat(\'ICE\')">ICE — In-Class</div>'
     +'</div></div>'
-    +'<div class="form-group" style="margin:0;"><label class="form-label">Due date <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><input class="form-input" id="new-asgn-due" type="date"></div>'
+    +'<div class="form-group" style="margin:0;"><label class="form-label">Due date <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label>'
+    +'<div style="display:flex;gap:6px;align-items:center;"><input class="form-input" id="new-asgn-due" type="date" style="flex:1;">'
+    +'<input class="form-input" id="new-asgn-time" type="time" value="23:59" style="width:100px;">'
+    +'<span style="font-size:12px;color:var(--text3);white-space:nowrap;">EST</span></div></div>'
     +'<button class="btn btn-primary" style="width:auto;margin-bottom:1px;" onclick="createAssignment()">Create</button>'
     +'</div><span id="asgn-note" style="font-size:13px;color:var(--text3);display:block;margin-top:8px;height:16px;"></span></div>';
 
@@ -1557,15 +1560,23 @@ function showAsgnNote(msg) {
   if(n){ n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
 }
 
+function formatTime12(t) {
+  var parts=t.split(':'), h=parseInt(parts[0]), m=parts[1];
+  return (h===0?12:h>12?h-12:h)+':'+m+' '+(h<12?'AM':'PM');
+}
+
 function createAssignment() {
   var name=(document.getElementById('new-asgn-name').value||'').trim();
   if(!name){ showAsgnNote('Please enter a name.'); return; }
   if(assignments.some(function(a){ return a.name===name; })){ showAsgnNote('An assignment with that name already exists.'); return; }
   var due=document.getElementById('new-asgn-due').value||'';
-  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:due});
+  var time=document.getElementById('new-asgn-time').value||'23:59';
+  var dueDateTime=due?(due+' at '+formatTime12(time)+' EST'):'';
+  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:dueDateTime});
   saveAssignments();
   document.getElementById('new-asgn-name').value='';
   document.getElementById('new-asgn-due').value='';
+  document.getElementById('new-asgn-time').value='23:59';
   showAsgnNote('Assignment created!');
   renderAssignments();
 }

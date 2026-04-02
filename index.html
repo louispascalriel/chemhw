@@ -381,6 +381,10 @@ grant select on student_results to service_role;
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M2 8h12"/></svg>
           Question builder
         </div>
+        <div class="nav-item" id="nav-assignments" onclick="showPanel('assignments',this)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="3" rx="1"/><rect x="2" y="7" width="12" height="3" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg>
+          Assignment creator
+        </div>
         <div class="nav-item" id="nav-settings" onclick="showPanel('settings',this)">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
           Settings
@@ -518,6 +522,11 @@ grant select on student_results to service_role;
           </div>
         </div>
 
+        <!-- ASSIGNMENTS PANEL -->
+        <div id="panel-assignments" class="panel">
+          <div id="assignments-main"></div>
+        </div>
+
         <!-- SETTINGS PANEL -->
         <div id="panel-settings" class="panel">
           <div class="card">
@@ -623,6 +632,7 @@ var currentProfile = null;
 function loadCFG() {
   try { var s = localStorage.getItem('chemhw_cfg'); if(s) CFG = JSON.parse(s); } catch(e){}
   try { var q = localStorage.getItem('chemhw_questions'); if(q){ var d=JSON.parse(q); if(d.questions&&d.questions.length){ questions=d.questions; nextId=d.nextId||nextId; } } } catch(e){}
+  try { var a = localStorage.getItem('chemhw_assignments'); if(a){ var d=JSON.parse(a); if(d.assignments){ assignments=d.assignments; nextAssignmentId=d.nextId||nextAssignmentId; } } } catch(e){}
 }
 function saveCFG() { localStorage.setItem('chemhw_cfg', JSON.stringify(CFG)); }
 function saveQuestions() { localStorage.setItem('chemhw_questions', JSON.stringify({questions:questions,nextId:nextId})); }
@@ -892,9 +902,10 @@ function showPanel(name, el) {
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
   document.getElementById('panel-'+name).classList.add('active');
   if (el) el.classList.add('active');
-  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', settings:'Settings' };
+  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment creator', settings:'Settings' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
+  if (name==='assignments') { editingAssignmentId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
 }
 
@@ -1427,6 +1438,169 @@ function resetBuilderForm() {
   clearImage(); clearTable();
   document.getElementById('mc-options-builder').innerHTML=''; mcOptCount=0;
   if (builderType==='mc') { addMCOpt();addMCOpt();addMCOpt();addMCOpt(); }
+}
+
+// ══════════════════════════════════════════
+//  ASSIGNMENTS
+// ══════════════════════════════════════════
+var assignments=[], nextAssignmentId=1, editingAssignmentId=null, newAsgnCategory='HW';
+
+function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
+
+function renderAssignments() {
+  var el=document.getElementById('assignments-main'); if(!el) return;
+  if(editingAssignmentId!==null) { renderAssignmentEditor(el); } else { renderAssignmentList(el); }
+}
+
+function renderAssignmentList(el) {
+  var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+  var html='<div class="card"><div class="card-header"><div class="card-title">Create assignment</div></div>'
+    +'<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+    +'<div class="form-group" style="margin:0;flex:1;min-width:180px;"><label class="form-label">Name</label><input class="form-input" id="new-asgn-name" placeholder="e.g. Unit 1 Homework"></div>'
+    +'<div class="form-group" style="margin:0;"><label class="form-label">Category</label><div class="type-tabs" style="margin:0;">'
+    +'<div class="type-tab'+(newAsgnCategory==='HW'?' active':'')+'" id="new-asgn-hw" onclick="setNewAsgnCat(\'HW\')">HW — Homework</div>'
+    +'<div class="type-tab'+(newAsgnCategory==='ICE'?' active':'')+'" id="new-asgn-ice" onclick="setNewAsgnCat(\'ICE\')">ICE — In-Class</div>'
+    +'</div></div>'
+    +'<div class="form-group" style="margin:0;"><label class="form-label">Due date <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><input class="form-input" id="new-asgn-due" type="date"></div>'
+    +'<button class="btn btn-primary" style="width:auto;margin-bottom:1px;" onclick="createAssignment()">Create</button>'
+    +'</div><span id="asgn-note" style="font-size:13px;color:var(--text3);display:block;margin-top:8px;height:16px;"></span></div>';
+
+  html+='<div class="card" style="margin-top:1rem;"><div class="card-header"><div class="card-title">Assignments</div><span style="font-size:13px;color:var(--text3);">'+assignments.length+' assignment'+(assignments.length!==1?'s':'')+'</span></div>';
+  if(!assignments.length){
+    html+='<div class="empty">No assignments yet — create one above.</div>';
+  } else {
+    assignments.forEach(function(a){
+      var qCount=questions.filter(function(q){ return (q.assignment||'General')===a.name; }).length;
+      var dueStr=a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'';
+      var visColor=a.visible?'var(--green)':'var(--text3)';
+      html+='<div class="bank-item"><div class="bank-item-body">'
+        +'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>'
+        +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
+        +'<span class="badge badge-'+a.category.toLowerCase()+'">'+a.category+'</span>'
+        +'<span style="font-size:12px;color:var(--text2);">'+qCount+' question'+(qCount!==1?'s':'')+'</span>'
+        +dueStr
+        +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+(a.visible?'Visible to students':'Hidden from students')+'</span>'
+        +'</div></div>'
+        +'<div class="bank-actions">'
+        +'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
+        +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
+        +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>'
+        +'</div></div>';
+    });
+  }
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function bankItemHtml(q, actionHtml) {
+  var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+  return '<div class="bank-item" style="margin-bottom:6px;">'
+    +'<div class="bank-item-body"><div class="bank-item-q">'+q.text.replace(/<[^>]+>/g,'').substring(0,90)+'</div>'
+    +'<div class="bank-item-meta" style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
+    +'<span class="badge badge-'+q.type+'">'+tl[q.type]+'</span>'
+    +(q.section?'<span style="font-size:11px;color:var(--text2);">'+q.section+'</span>':'')
+    +(q.keywords&&q.keywords.length?'<span style="font-size:11px;color:var(--accent);">'+q.keywords.join(', ')+'</span>':'')
+    +'</div></div><div class="bank-actions">'+actionHtml+'</div></div>';
+}
+
+function renderAssignmentEditor(el) {
+  var a=assignments.find(function(x){ return x.id===editingAssignmentId; });
+  if(!a){ editingAssignmentId=null; renderAssignments(); return; }
+  var assignedQs=questions.filter(function(q){ return (q.assignment||'General')===a.name; });
+  var unassignedQs=questions.filter(function(q){ return (q.assignment||'General')!==a.name; });
+  var assignedHtml=assignedQs.length
+    ? assignedQs.map(function(q){ return bankItemHtml(q,'<button class="btn btn-danger btn-sm" onclick="removeQFromAssignment('+q.id+')">Remove</button>'); }).join('')
+    : '<div class="empty" style="padding:1rem;">No questions in this assignment yet.</div>';
+  var unassignedHtml=unassignedQs.length
+    ? unassignedQs.map(function(q){ return bankItemHtml(q,'<button class="btn btn-primary btn-sm" onclick="addQToAssignment('+q.id+')">Add</button>'); }).join('')
+    : '<div class="empty" style="padding:1rem;">No more questions in the bank.</div>';
+  el.innerHTML='<div class="card">'
+    +'<div class="assignment-back" style="margin-bottom:1.25rem;">'
+    +'<button class="btn btn-secondary btn-sm" onclick="closeAssignmentEditor()">← Assignments</button>'
+    +'<span class="assignment-back-title">'+a.name+'</span>'
+    +'<span class="badge badge-'+a.category.toLowerCase()+'" style="margin-left:4px;">'+a.category+'</span>'
+    +(a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'')
+    +'</div>'
+    +'<div class="card-title" style="margin-bottom:0.75rem;">In this assignment <span style="font-size:13px;font-weight:400;color:var(--text3);">('+assignedQs.length+')</span></div>'
+    +assignedHtml
+    +'<div style="border-top:1px solid var(--border);margin:1.25rem 0;"></div>'
+    +'<div class="card-title" style="margin-bottom:0.75rem;">Add from question bank <span style="font-size:13px;font-weight:400;color:var(--text3);">('+unassignedQs.length+' available)</span></div>'
+    +'<input class="form-input" id="editor-bank-search" placeholder="Search by keyword, text, or section…" oninput="filterEditorBank()" style="margin-bottom:0.75rem;font-size:13px;">'
+    +'<div id="editor-bank-list">'+unassignedHtml+'</div>'
+    +'</div>';
+}
+
+function filterEditorBank() {
+  var term=((document.getElementById('editor-bank-search')||{}).value||'').trim().toLowerCase();
+  var a=assignments.find(function(x){ return x.id===editingAssignmentId; }); if(!a) return;
+  var qs=questions.filter(function(q){ return (q.assignment||'General')!==a.name; });
+  if(term) qs=qs.filter(function(q){
+    return (q.keywords||[]).some(function(k){ return k.includes(term); })
+      || q.text.replace(/<[^>]+>/g,'').toLowerCase().includes(term)
+      || (q.section||'').toLowerCase().includes(term);
+  });
+  var listEl=document.getElementById('editor-bank-list');
+  if(listEl) listEl.innerHTML=qs.length
+    ? qs.map(function(q){ return bankItemHtml(q,'<button class="btn btn-primary btn-sm" onclick="addQToAssignment('+q.id+')">Add</button>'); }).join('')
+    : '<div class="empty" style="padding:1rem;">No questions match.</div>';
+}
+
+function setNewAsgnCat(c) {
+  newAsgnCategory=c;
+  var hw=document.getElementById('new-asgn-hw'), ice=document.getElementById('new-asgn-ice');
+  if(hw) hw.className='type-tab'+(c==='HW'?' active':'');
+  if(ice) ice.className='type-tab'+(c==='ICE'?' active':'');
+}
+
+function showAsgnNote(msg) {
+  var n=document.getElementById('asgn-note');
+  if(n){ n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
+}
+
+function createAssignment() {
+  var name=(document.getElementById('new-asgn-name').value||'').trim();
+  if(!name){ showAsgnNote('Please enter a name.'); return; }
+  if(assignments.some(function(a){ return a.name===name; })){ showAsgnNote('An assignment with that name already exists.'); return; }
+  var due=document.getElementById('new-asgn-due').value||'';
+  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:due});
+  saveAssignments();
+  document.getElementById('new-asgn-name').value='';
+  document.getElementById('new-asgn-due').value='';
+  showAsgnNote('Assignment created!');
+  renderAssignments();
+}
+
+function toggleAssignmentVisible(id) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  a.visible=!a.visible;
+  questions.forEach(function(q){ if((q.assignment||'General')===a.name) q.hidden=!a.visible; });
+  saveAssignments(); saveQuestions();
+  renderAssignments(); renderStudentQuestions(); updateScore();
+}
+
+function deleteAssignment(id) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  if(!confirm('Delete "'+a.name+'"? Questions will be returned to the bank as unassigned.')) return;
+  questions.forEach(function(q){ if((q.assignment||'General')===a.name){ q.assignment='General'; q.hidden=false; q.category='HW'; } });
+  assignments=assignments.filter(function(x){ return x.id!==id; });
+  saveAssignments(); saveQuestions();
+  renderAssignments(); renderBank(); renderStudentQuestions();
+}
+
+function openAssignmentEditor(id) { editingAssignmentId=id; renderAssignments(); }
+function closeAssignmentEditor() { editingAssignmentId=null; renderAssignments(); }
+
+function addQToAssignment(qid) {
+  var a=assignments.find(function(x){ return x.id===editingAssignmentId; }); if(!a) return;
+  var q=questions.find(function(x){ return x.id===qid; }); if(!q) return;
+  q.assignment=a.name; q.category=a.category; q.hidden=!a.visible;
+  saveQuestions(); renderAssignments(); renderBank(); renderStudentQuestions();
+}
+
+function removeQFromAssignment(qid) {
+  var q=questions.find(function(x){ return x.id===qid; }); if(!q) return;
+  q.assignment='General'; q.hidden=false; q.category='HW';
+  saveQuestions(); renderAssignments(); renderBank(); renderStudentQuestions();
 }
 
 // ══════════════════════════════════════════

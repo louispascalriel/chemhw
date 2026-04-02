@@ -511,7 +511,7 @@ grant select on student_results to service_role;
               <select class="form-select" id="bank-filter" onchange="renderBank()" style="width:auto;min-width:160px;font-size:13px;padding:5px 9px;"><option value="">All assignments</option></select>
               <button class="btn btn-secondary btn-sm" onclick="exportQ()">Export questions</button>
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-modal').classList.add('open')">Import questions</button>
-              <input type="file" id="import-file" accept=".json" style="display:none" onchange="importQ(event)">
+              <input type="file" id="import-file" accept=".csv" style="display:none" onchange="importCSV(event)">
             </div>
             <div id="bank-list"></div>
           </div>
@@ -562,22 +562,32 @@ grant select on student_results to service_role;</pre>
 
 <!-- Import info modal -->
 <div class="modal-backdrop" id="import-modal">
-  <div class="modal" style="max-width:520px;">
+  <div class="modal" style="max-width:540px;">
     <div class="modal-title">Import questions</div>
-    <p style="font-size:14px;color:var(--text2);margin-bottom:1rem;">Select a <strong>.json</strong> file previously exported from ChemHW. Questions will be <strong>added</strong> to your existing bank — nothing will be overwritten.</p>
-    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:12px;font-family:'DM Mono',monospace;line-height:1.7;overflow-x:auto;margin-bottom:1rem;">
-      {<br>
-      &nbsp;&nbsp;"questions": [<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;{ "type": <span style="color:var(--accent);">"formula"</span>, "text": "...", "answers": ["h2o"], "assignment": "HW 1", "category": "HW" },<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;{ "type": <span style="color:var(--accent);">"mc"</span>, "text": "...", "options": ["A","B","C"], "correct": 0, "assignment": "HW 1", "category": "HW" },<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;{ "type": <span style="color:var(--accent);">"sci"</span>, "text": "...", "correctVal": 6.022e23, "tol": 0.01, "assignment": "HW 1", "category": "HW" },<br>
-      &nbsp;&nbsp;&nbsp;&nbsp;{ "type": <span style="color:var(--accent);">"calc"</span>, "text": "...", "correctVal": 42.5, "unit": "g/mol", "tol": 0.02, "assignment": "HW 1", "category": "HW" }<br>
-      &nbsp;&nbsp;]<br>
-      }
-    </div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:0;">The easiest way to get a valid file is to use <strong>Export questions</strong> from another ChemHW instance.</p>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:1rem;">Fill in a spreadsheet (Excel or Google Sheets) and import it as a <strong>.csv</strong> file. Questions will be <strong>added</strong> to your existing bank — nothing will be overwritten.</p>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:1rem;">
+      <thead><tr style="background:var(--surface2);">
+        <th style="text-align:left;padding:6px 8px;border:1px solid var(--border);">Column</th>
+        <th style="text-align:left;padding:6px 8px;border:1px solid var(--border);">What to enter</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">type</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);">formula, mc, sci, or calc</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">assignment</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);">e.g. HW 1 (any name you like)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">category</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);">HW or ICE</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">text</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);">The question</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">answers</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>Formula only</em> — separate multiple accepted answers with a semicolon (e.g. H2O;HOH)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">option_a … option_d</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>MC only</em> — one column per answer choice</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">correct_option</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>MC only</em> — letter of correct choice (A, B, C, or D)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">value</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>Sci / Calc only</em> — the correct numeric answer (e.g. 6.022e23)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">unit</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>Calc only</em> — e.g. g/mol (optional)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">tolerance_pct</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);"><em>Sci / Calc only</em> — % margin e.g. 2 means ±2% (optional)</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid var(--border);font-family:'DM Mono',monospace;">hint</td><td style="padding:5px 8px;border:1px solid var(--border);color:var(--text2);">Optional hint shown to students</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:0;">Download the template to get a pre-filled example for each question type.</p>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeImportModal()">Cancel</button>
+      <button class="btn btn-secondary" onclick="downloadCSVTemplate()">Download template</button>
       <button class="btn btn-primary" onclick="closeImportModal(); document.getElementById('import-file').click()">Choose file…</button>
     </div>
   </div>
@@ -1466,22 +1476,89 @@ function exportQ() {
   var blob=new Blob([JSON.stringify({questions},null,2)],{type:'application/json'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='chemhw-questions.json'; a.click();
 }
-function importQ(e) {
+function parseCSV(text) {
+  var rows=[]; var lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  lines.forEach(function(line){
+    if(!line.trim()) return;
+    var row=[],i=0;
+    while(i<=line.length){
+      if(line[i]==='"'){
+        i++; var field='';
+        while(i<line.length){ if(line[i]==='"'&&line[i+1]==='"'){field+='"';i+=2;} else if(line[i]==='"'){i++;break;} else{field+=line[i++];} }
+        row.push(field); if(line[i]===',') i++;
+      } else {
+        var end=line.indexOf(',',i); if(end===-1){row.push(line.slice(i));break;} row.push(line.slice(i,end)); i=end+1;
+      }
+    }
+    rows.push(row);
+  });
+  return rows;
+}
+
+function importCSV(e) {
   var file=e.target.files[0]; if(!file) return;
   var reader=new FileReader();
   reader.onload=function(ev){
     try {
-      var data=JSON.parse(ev.target.result);
-      if (data.questions&&Array.isArray(data.questions)) {
-        var incoming=data.questions.map(function(q){ q.id=nextId++; return q; });
-        questions=questions.concat(incoming);
-        saveQuestions();
+      var rows=parseCSV(ev.target.result);
+      if(rows.length<2){alert('File appears to be empty.');return;}
+      var headers=rows[0].map(function(h){return h.trim().toLowerCase();});
+      var col={}; headers.forEach(function(h,i){col[h]=i;});
+      var get=function(row,name){return(col[name]!==undefined&&row[col[name]]!==undefined)?row[col[name]].trim():'';};
+      var imported=[],errors=[];
+      rows.slice(1).forEach(function(row,ri){
+        if(row.every(function(c){return !c.trim();})) return;
+        var type=get(row,'type').toLowerCase();
+        var text=get(row,'text');
+        var assignment=get(row,'assignment')||'General';
+        var category=(get(row,'category')||'HW').toUpperCase();
+        if(!['formula','mc','sci','calc'].includes(type)){errors.push('Row '+(ri+2)+': unknown type "'+type+'"');return;}
+        if(!text){errors.push('Row '+(ri+2)+': missing question text');return;}
+        var q={id:nextId++,type:type,text:text,assignment:assignment,category:category,hidden:category==='ICE'};
+        var hint=get(row,'hint'); if(hint) q.hint=hint;
+        if(type==='formula'){
+          var ans=get(row,'answers'); if(!ans){errors.push('Row '+(ri+2)+': formula question needs answers');return;}
+          q.answers=ans.split(';').map(function(a){return normChem(a.trim());}).filter(Boolean);
+        } else if(type==='mc'){
+          var opts=['option_a','option_b','option_c','option_d','option_e','option_f'].map(function(c){return get(row,c);}).filter(Boolean);
+          if(opts.length<2){errors.push('Row '+(ri+2)+': MC needs at least 2 options');return;}
+          var letter=get(row,'correct_option').toUpperCase();
+          var idx=letter.charCodeAt(0)-65;
+          if(isNaN(idx)||idx<0||idx>=opts.length){errors.push('Row '+(ri+2)+': invalid correct_option — use A, B, C, or D');return;}
+          q.options=opts; q.correct=idx;
+          var exp=get(row,'explanation')||get(row,'hint'); if(exp) q.explanation=exp;
+        } else {
+          var val=parseFloat(get(row,'value'));
+          if(isNaN(val)){errors.push('Row '+(ri+2)+': missing or invalid value');return;}
+          q.correctVal=val;
+          var tol=parseFloat(get(row,'tolerance_pct'));
+          q.tol=isNaN(tol)?(type==='sci'?0.01:0.02):Math.max(0,tol/100);
+          if(type==='calc'){var unit=get(row,'unit'); if(unit) q.unit=unit;}
+        }
+        imported.push(q);
+      });
+      if(errors.length) alert('Some rows had errors and were skipped:\n\n'+errors.join('\n'));
+      if(imported.length){
+        questions=questions.concat(imported); saveQuestions();
         renderBank(); renderStudentQuestions();
-        alert('Imported '+incoming.length+' question'+(incoming.length===1?'':'s')+'. Bank now has '+questions.length+'.');
+        alert('Imported '+imported.length+' question'+(imported.length===1?'':'s')+'. Bank now has '+questions.length+'.');
       }
-    } catch(err){ alert('Could not read file.'); }
+    } catch(err){alert('Could not read file: '+err.message);}
   };
   reader.readAsText(file); e.target.value='';
+}
+
+function downloadCSVTemplate() {
+  var header='type,assignment,category,text,answers,option_a,option_b,option_c,option_d,correct_option,value,tolerance_pct,unit,hint';
+  var rows=[
+    header,
+    'formula,HW 1,HW,What is the formula for water?,H2O;HOH,,,,,,,,,"Type plain text — subscripts render automatically"',
+    'mc,HW 1,HW,Which of the following is an acid?,,HCl,NaOH,NaCl,H2O,A,,,,"Think about H⁺ donors"',
+    'sci,HW 1,HW,What is Avogadro\'s number?,,,,,,,,6.022e23,1,,',
+    'calc,HW 1,HW,What is the molar mass of NaCl?,,,,,,,,58.44,2,g/mol,'
+  ];
+  var blob=new Blob([rows.join('\n')],{type:'text/csv'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='chemhw-template.csv'; a.click();
 }
 
 // ══════════════════════════════════════════

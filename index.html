@@ -1554,8 +1554,8 @@ function downloadCSVTemplate() {
     header,
     'formula,HW 1,HW,What is the formula for water?,H2O;HOH,,,,,,,,,"Type plain text — subscripts render automatically"',
     'mc,HW 1,HW,Which of the following is an acid?,,HCl,NaOH,NaCl,H2O,A,,,,"Think about H⁺ donors"',
-    'sci,HW 1,HW,What is Avogadro\'s number?,,,,,,,,6.022e23,1,,',
-    'calc,HW 1,HW,What is the molar mass of NaCl?,,,,,,,,58.44,2,g/mol,'
+    'sci,HW 1,HW,What is Avogadro\'s number?,,,,,,,6.022e23,1,,',
+    'calc,HW 1,HW,What is the molar mass of NaCl?,,,,,,,58.44,2,g/mol,'
   ];
   var blob=new Blob([rows.join('\n')],{type:'text/csv'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='chemhw-template.csv'; a.click();

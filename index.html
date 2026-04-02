@@ -1450,11 +1450,11 @@ function importQ(e) {
     try {
       var data=JSON.parse(ev.target.result);
       if (data.questions&&Array.isArray(data.questions)) {
-        questions=data.questions;
-        nextId=Math.max.apply(null,questions.map(function(q){ return q.id; }))+1;
+        var incoming=data.questions.map(function(q){ q.id=nextId++; return q; });
+        questions=questions.concat(incoming);
         saveQuestions();
-        resetStudentState(); renderBank(); renderStudentQuestions();
-        alert('Imported '+questions.length+' questions.');
+        renderBank(); renderStudentQuestions();
+        alert('Imported '+incoming.length+' question'+(incoming.length===1?'':'s')+'. Bank now has '+questions.length+'.');
       }
     } catch(err){ alert('Could not read file.'); }
   };

@@ -450,8 +450,8 @@ grant select on student_results to service_role;
               <div class="type-tab" id="tt-calc" onclick="setBuilderType('calc')">Calculation</div>
             </div>
             <div class="form-group"><label class="form-label">Question text</label><textarea class="form-textarea" id="b-qtext" placeholder="Enter the question…"></textarea></div>
-            <div class="form-group"><label class="form-label">Category</label><div class="type-tabs" style="margin-bottom:0;"><div class="type-tab" id="cat-ice" onclick="setCategory('ICE')">ICE — In-Class</div><div class="type-tab active" id="cat-hw" onclick="setCategory('HW')">HW — Homework</div></div></div>
-            <div class="form-group"><label class="form-label">Assignment <span style="font-weight:400;text-transform:none;font-size:11px;">(group questions into assignments for students)</span></label><input class="form-input" id="b-assignment" placeholder="e.g. Unit 3 Homework" list="assignment-datalist"><datalist id="assignment-datalist"></datalist></div>
+            <div class="form-group"><label class="form-label">Section <span style="font-weight:400;text-transform:none;font-size:11px;">(course topic or unit this question belongs to)</span></label><input class="form-input" id="b-section" placeholder="e.g. Unit 1: Atomic Structure" list="section-datalist"><datalist id="section-datalist"></datalist></div>
+            <div class="form-group"><label class="form-label">Keywords <span style="font-weight:400;text-transform:none;font-size:11px;">(comma-separated tags for searching)</span></label><input class="form-input" id="b-keywords" placeholder="e.g. ionic bonds, periodic table, electronegativity"></div>
             <div class="form-group">
               <label class="form-label">Attach image (optional)</label>
               <div class="uploader" onclick="document.getElementById('b-img-file').click()"><p>Click to upload PNG / JPG</p><input type="file" id="b-img-file" accept="image/*" style="display:none" onchange="handleImageUpload(event)"></div>
@@ -506,8 +506,9 @@ grant select on student_results to service_role;
 
           <div class="card">
             <div class="card-header"><div class="card-title">Question bank</div><span style="font-size:13px;color:var(--text3);" id="bank-count">0 questions</span></div>
-            <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center;">
-              <select class="form-select" id="bank-cat-filter" onchange="renderBank()" style="width:auto;min-width:130px;font-size:13px;padding:5px 9px;"><option value="">All categories</option><option value="ICE">ICE</option><option value="HW">HW</option></select>
+            <div style="display:flex;gap:8px;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;">
+              <input class="form-input" id="bank-search" placeholder="Search by keyword…" oninput="renderBank()" style="width:200px;font-size:13px;padding:5px 9px;">
+              <select class="form-select" id="bank-section-filter" onchange="renderBank()" style="width:auto;min-width:160px;font-size:13px;padding:5px 9px;"><option value="">All sections</option></select>
               <select class="form-select" id="bank-filter" onchange="renderBank()" style="width:auto;min-width:160px;font-size:13px;padding:5px 9px;"><option value="">All assignments</option></select>
               <button class="btn btn-secondary btn-sm" onclick="exportQ()">Export questions</button>
               <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-modal').classList.add('open')">Import questions</button>
@@ -1381,7 +1382,8 @@ function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent
 function addQuestion() {
   var qtext=document.getElementById('b-qtext').value.trim();
   if (!qtext) { showBNote('Please enter a question.'); return; }
-  var q={ id:nextId++, type:builderType, text:qtext, assignment:(document.getElementById('b-assignment').value.trim()||'General'), category:builderCategory, hidden:builderCategory==='ICE' };
+  var kw=(document.getElementById('b-keywords').value.trim()||'').split(',').map(function(k){return k.trim().toLowerCase();}).filter(Boolean);
+  var q={ id:nextId++, type:builderType, text:qtext, section:document.getElementById('b-section').value.trim(), keywords:kw, category:'HW', hidden:false };
   var imgEl=document.getElementById('b-img-preview');
   if (imgEl.src&&imgEl.src!==window.location.href) { q.image=imgEl.src; q.imageCaption=document.getElementById('b-img-caption').value.trim(); }
   var tbl=getTableData(); if(tbl) q.tableData=tbl;
@@ -1418,14 +1420,13 @@ function addQuestion() {
 }
 
 function resetBuilderForm() {
-  ['b-qtext','b-assignment','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  ['b-qtext','b-section','b-keywords','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   ['b-sci-coeff','b-sci-exp','b-calc-val'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('b-sci-tol').value='1'; document.getElementById('b-calc-tol').value='2';
   document.getElementById('b-formula-preview').innerHTML='';
   clearImage(); clearTable();
   document.getElementById('mc-options-builder').innerHTML=''; mcOptCount=0;
   if (builderType==='mc') { addMCOpt();addMCOpt();addMCOpt();addMCOpt(); }
-  setCategory('HW');
 }
 
 // ══════════════════════════════════════════
@@ -1434,28 +1435,48 @@ function resetBuilderForm() {
 function renderBank() {
   var el=document.getElementById('bank-list');
   var assignments=[...new Set(questions.map(function(q){ return q.assignment||'General'; }))].sort();
+  var sections=[...new Set(questions.map(function(q){ return q.section||''; }).filter(Boolean))].sort();
   var filterEl=document.getElementById('bank-filter');
+  var sectionFilterEl=document.getElementById('bank-section-filter');
   var dlEl=document.getElementById('assignment-datalist');
+  var secDlEl=document.getElementById('section-datalist');
   var currentFilter=filterEl?filterEl.value:'';
+  var sectionFilter=sectionFilterEl?sectionFilterEl.value:'';
+  var searchTerm=((document.getElementById('bank-search')||{}).value||'').trim().toLowerCase();
   if(filterEl){ filterEl.innerHTML='<option value="">All assignments</option>'+assignments.map(function(a){ return '<option value="'+a+'"'+(a===currentFilter?' selected':'')+'>'+a+'</option>'; }).join(''); }
+  if(sectionFilterEl){ sectionFilterEl.innerHTML='<option value="">All sections</option>'+sections.map(function(s){ return '<option value="'+s+'"'+(s===sectionFilter?' selected':'')+'>'+s+'</option>'; }).join(''); }
   if(dlEl){ dlEl.innerHTML=assignments.map(function(a){ return '<option value="'+a+'">'; }).join(''); }
-  var catFilter=(document.getElementById('bank-cat-filter')||{value:''}).value||'';
-  var filtered=questions.filter(function(q){ return (!currentFilter||(q.assignment||'General')===currentFilter)&&(!catFilter||(q.category||'HW')===catFilter); });
-  document.getElementById('bank-count').textContent=filtered.length+(currentFilter||catFilter?' of '+questions.length:'')+' question'+(questions.length===1?'':'s');
-  if (!filtered.length) { el.innerHTML='<div class="empty">'+(questions.length?'No questions in this assignment.':'No questions yet.')+'</div>'; return; }
+  if(secDlEl){ secDlEl.innerHTML=sections.map(function(s){ return '<option value="'+s+'">'; }).join(''); }
+  var filtered=questions.filter(function(q){
+    if(currentFilter&&(q.assignment||'General')!==currentFilter) return false;
+    if(sectionFilter&&(q.section||'')!==sectionFilter) return false;
+    if(searchTerm){
+      var inKeywords=(q.keywords||[]).some(function(k){ return k.includes(searchTerm); });
+      var inText=q.text.replace(/<[^>]+>/g,'').toLowerCase().includes(searchTerm);
+      var inSection=(q.section||'').toLowerCase().includes(searchTerm);
+      if(!inKeywords&&!inText&&!inSection) return false;
+    }
+    return true;
+  });
+  var anyFilter=currentFilter||sectionFilter||searchTerm;
+  document.getElementById('bank-count').textContent=filtered.length+(anyFilter?' of '+questions.length:'')+' question'+(questions.length===1?'':'s');
+  if (!filtered.length) { el.innerHTML='<div class="empty">'+(questions.length?'No questions match your search.':'No questions yet.')+'</div>'; return; }
   el.innerHTML='';
   filtered.forEach(function(q,i){
     var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
     var asgn=q.assignment||'General';
     var catKey=q.category||'HW';
     var typeDetail=q.type==='formula'?'Answers: '+q.answers.join(', '):q.type==='mc'?q.options.length+' options':q.type==='calc'?'Value: '+q.correctVal+(q.unit?' '+q.unit:''):'Value: '+q.correctVal.toExponential(3);
-    var meta='<span class="badge badge-'+catKey.toLowerCase()+'">'+catKey+'</span> <span style="background:var(--surface2);color:var(--text2);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
+    var meta='<span class="badge badge-'+catKey.toLowerCase()+'">'+catKey+'</span>'
+      +(q.section?'<span style="background:var(--surface2);color:var(--text2);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+q.section+'</span>':'')
+      +' <span style="background:var(--surface2);color:var(--text2);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:600;">'+asgn+'</span> · '+tl[q.type]+' · '+typeDetail;
+    var kwHtml=(q.keywords&&q.keywords.length)?'<div style="margin-top:4px;">'+q.keywords.map(function(k){ return '<span style="background:var(--accent-light);color:var(--accent);padding:1px 7px;border-radius:99px;font-size:11px;font-weight:500;">'+k+'</span>'; }).join(' ')+'</div>':'';
     var isICE=catKey==='ICE';
     var visBtn=isICE?'<button class="btn btn-secondary btn-sm" onclick="toggleQVisibility('+q.id+')">'+(q.hidden?'Show to students':'Hide from students')+'</button>':'';
     var hiddenNote=isICE&&q.hidden?' <span style="font-size:11px;color:var(--text3);font-style:italic;">(hidden)</span>':'';
     var div=document.createElement('div');
     div.className='bank-item'; if(isICE&&q.hidden) div.style.opacity='0.55';
-    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+hiddenNote+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div></div><div class="bank-actions">'+visBtn+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
+    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+hiddenNote+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div>'+kwHtml+'</div><div class="bank-actions">'+visBtn+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
     el.appendChild(div);
   });
 }

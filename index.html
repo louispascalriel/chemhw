@@ -1024,9 +1024,7 @@ function renderStudentQuestions() {
           +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
           +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
     } else if (q.type==='sci') {
-      var tv=((q.tol||0.01)*100).toFixed(1);
       body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
-          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0.1" max="10" step="0.1" value="'+tv+'" id="stol-'+q.id+'" oninput="document.getElementById(\'stv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="stv-'+q.id+'">'+tv+'%</span></div>'
           +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
           +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
     } else if (q.type==='mc') {
@@ -1036,9 +1034,7 @@ function renderStudentQuestions() {
       body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
       if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
     } else if (q.type==='calc') {
-      var cv=((q.tol||0.02)*100).toFixed(1);
       body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
-          +'<div class="tol-row"><label>Tolerance:</label><input type="range" min="0" max="10" step="0.1" value="'+cv+'" id="ctol-'+q.id+'" oninput="document.getElementById(\'ctv-'+q.id+'\').textContent=parseFloat(this.value).toFixed(1)+\'%\'"><span class="tol-val" id="ctv-'+q.id+'">'+cv+'%</span></div>'
           +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
           +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
     }
@@ -1076,7 +1072,8 @@ function checkSci(qid,correctVal) {
   var e=parseInt(document.getElementById('sexp-'+qid).value);
   var el=document.getElementById('res-'+qid);
   if (isNaN(c)||isNaN(e)) { el.className='result-msg partial'; el.innerHTML='Enter both coefficient and exponent.'; return; }
-  var tol=parseFloat(document.getElementById('stol-'+qid).value)/100;
+  var q=questions.find(function(x){ return x.id===qid; });
+  var tol=q?q.tol:0.01;
   var sv=c*Math.pow(10,e), diff=Math.abs(sv-correctVal)/Math.abs(correctVal);
   handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal.toExponential(3),c+'×10^'+e);
 }
@@ -1101,9 +1098,9 @@ function checkCalc(qid,correctVal) {
   if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
   var v=parseFloat(document.getElementById('scalc-'+qid).value);
   if (isNaN(v)) { var el=document.getElementById('res-'+qid); el.className='result-msg partial'; el.innerHTML='Please enter a value.'; return; }
-  var tol=parseFloat(document.getElementById('ctol-'+qid).value)/100;
-  var diff=Math.abs(v-correctVal)/Math.abs(correctVal);
   var q=questions.find(function(x){ return x.id===qid; });
+  var tol=q?q.tol:0.02;
+  var diff=Math.abs(v-correctVal)/Math.abs(correctVal);
   handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal+(q.unit?' '+q.unit:''),v+(q.unit?' '+q.unit:''));
 }
 

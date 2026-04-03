@@ -960,7 +960,21 @@ function showStudentCategory(cat, el) {
   renderStudentQuestions(); updateScore();
 }
 
+function isAssignmentPastDue(name) {
+  var a=assignments.find(function(x){ return x.name===name; });
+  if(!a||!a.dueISO) return false;
+  return new Date()>new Date(a.dueISO);
+}
+function formatDueDate(dueISO) {
+  if(!dueISO) return '';
+  var d=new Date(dueISO);
+  var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var h=d.getHours(),m=d.getMinutes();
+  return 'Due '+mo[d.getMonth()]+' '+d.getDate()+' at '+(h===0?12:h>12?h-12:h)+':'+(m<10?'0'+m:m)+' '+(h<12?'AM':'PM');
+}
+
 function showAssignment(name) {
+  if(isAssignmentPastDue(name)) return;
   studentAssignment=name;
   renderStudentQuestions(); updateScore();
 }
@@ -986,10 +1000,21 @@ function renderStudentQuestions() {
     Object.keys(aMap).forEach(function(name){
       var qs=aMap[name], total=qs.length, correct=qs.filter(function(q){ return solved[String(q.id)]; }).length;
       var allDone=correct===total;
-      html+='<div class="assignment-card" onclick="showAssignment(\''+name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">'
-        +'<div><div class="assignment-card-name">'+name+'</div><div class="assignment-card-meta">'+total+' question'+(total!==1?'s':'')+'</div></div>'
-        +'<div class="assignment-card-right"><span class="assignment-card-progress" style="'+(allDone?'color:var(--green,#2e7d32)':'')+'">'+correct+' / '+total+' correct</span><span style="color:var(--text3);font-size:20px;line-height:1;">›</span></div>'
-        +'</div>';
+      var pastDue=isAssignmentPastDue(name);
+      var aObj=assignments.find(function(x){ return x.name===name; });
+      var dueLabel=aObj&&aObj.dueISO?'<div class="assignment-card-meta" style="margin-top:2px;'+(pastDue?'color:var(--red);':'')+'">'+formatDueDate(aObj.dueISO)+(pastDue?' — Closed':'')+'</div>':'';
+      var safeName=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      if(pastDue){
+        html+='<div class="assignment-card" style="opacity:0.55;cursor:not-allowed;">'
+          +'<div><div class="assignment-card-name">'+name+'</div>'+dueLabel+'</div>'
+          +'<div class="assignment-card-right"><span style="font-size:12px;font-weight:600;color:var(--red);background:var(--red-light);border:1px solid var(--red);padding:2px 8px;border-radius:99px;">Closed</span></div>'
+          +'</div>';
+      } else {
+        html+='<div class="assignment-card" onclick="showAssignment(\''+safeName+'\')">'
+          +'<div><div class="assignment-card-name">'+name+'</div>'+dueLabel+'<div class="assignment-card-meta">'+total+' question'+(total!==1?'s':'')+'</div></div>'
+          +'<div class="assignment-card-right"><span class="assignment-card-progress" style="'+(allDone?'color:var(--green,#2e7d32)':'')+'">'+correct+' / '+total+' correct</span><span style="color:var(--text3);font-size:20px;line-height:1;">›</span></div>'
+          +'</div>';
+      }
     });
     html+='</div>';
     container.innerHTML=html;
@@ -1588,7 +1613,7 @@ function renderAssignmentList(el) {
 function adoptAssignment(name) {
   var groupQs=questions.filter(function(q){ return (q.assignment||'General')===name; });
   var cat=groupQs.length?(groupQs[0].category||'HW'):'HW';
-  assignments.push({id:nextAssignmentId++,name:name,category:cat,visible:true,dueDate:''});
+  assignments.push({id:nextAssignmentId++,name:name,category:cat,visible:true,dueDate:'',dueISO:''});
   saveAssignments();
   renderAssignments();
 }
@@ -1670,7 +1695,8 @@ function createAssignment() {
   var due=document.getElementById('new-asgn-due').value||'';
   var time=document.getElementById('new-asgn-time').value||'23:59';
   var dueDateTime=due?(due+' at '+formatTime12(time)+' EST'):'';
-  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:dueDateTime});
+  var dueISO=due?(due+'T'+time):'';
+  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:dueDateTime, dueISO:dueISO});
   saveAssignments();
   document.getElementById('new-asgn-name').value='';
   document.getElementById('new-asgn-due').value='';

@@ -1072,7 +1072,7 @@ function checkFormula(qid) {
   var raw=document.getElementById('si-'+qid).value.trim();
   if (!raw) return;
   var q=questions.find(function(x){ return x.id===qid; });
-  var ok=q.answers.some(function(a){ return a.toLowerCase()===normChem(raw).toLowerCase(); });
+  var ok=q.answers.some(function(a){ return a===normChem(raw); });
   handleResult(qid,ok,ok?'Correct! '+parseChem(raw)+' is right.':null,q.answers[0],raw);
 }
 

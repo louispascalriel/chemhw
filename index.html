@@ -388,7 +388,7 @@ grant select on student_results to service_role;
         </div>
         <div class="nav-item" id="nav-assignments" onclick="showPanel('assignments',this)">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="3" rx="1"/><rect x="2" y="7" width="12" height="3" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg>
-          Assignment creator
+          Assignment Organizer
         </div>
         <div class="nav-item" id="nav-settings" onclick="showPanel('settings',this)">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
@@ -912,7 +912,7 @@ function showPanel(name, el) {
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
   document.getElementById('panel-'+name).classList.add('active');
   if (el) el.classList.add('active');
-  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment creator', settings:'Settings' };
+  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment Organizer', settings:'Settings' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
   if (name==='assignments') { editingAssignmentId=null; renderAssignments(); }
@@ -1530,8 +1530,18 @@ function renderAssignmentList(el) {
     +'<button class="btn btn-primary" style="width:auto;margin-bottom:1px;" onclick="createAssignment()">Create</button>'
     +'</div><span id="asgn-note" style="font-size:13px;color:var(--text3);display:block;margin-top:8px;height:16px;"></span></div>';
 
-  html+='<div class="card" style="margin-top:1rem;"><div class="card-header"><div class="card-title">Assignments</div><span style="font-size:13px;color:var(--text3);">'+assignments.length+' assignment'+(assignments.length!==1?'s':'')+'</span></div>';
-  if(!assignments.length){
+  // Detect implicit assignments: question groups not yet in the formal assignments array
+  var formalNames=assignments.map(function(a){ return a.name; });
+  var implicitMap={};
+  questions.forEach(function(q){
+    var name=q.assignment||'General';
+    if(formalNames.indexOf(name)===-1){ if(!implicitMap[name]) implicitMap[name]={count:0,category:q.category||'HW'}; implicitMap[name].count++; }
+  });
+  var implicitNames=Object.keys(implicitMap);
+  var totalCount=assignments.length+implicitNames.length;
+
+  html+='<div class="card" style="margin-top:1rem;"><div class="card-header"><div class="card-title">Assignments</div><span style="font-size:13px;color:var(--text3);">'+totalCount+' assignment'+(totalCount!==1?'s':'')+'</span></div>';
+  if(!assignments.length && !implicitNames.length){
     html+='<div class="empty">No assignments yet — create one above.</div>';
   } else {
     assignments.forEach(function(a){
@@ -1552,9 +1562,35 @@ function renderAssignmentList(el) {
         +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>'
         +'</div></div>';
     });
+    if(implicitNames.length){
+      if(assignments.length) html+='<div style="border-top:1px solid var(--border);margin:0.5rem 0;"></div>';
+      html+='<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);padding:4px 0 8px;">Not yet in organizer</div>';
+      implicitNames.forEach(function(name){
+        var info=implicitMap[name];
+        var safeName=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        html+='<div class="bank-item"><div class="bank-item-body">'
+          +'<div class="bank-item-q" style="font-weight:600;">'+name+'</div>'
+          +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
+          +'<span class="badge badge-'+info.category.toLowerCase()+'">'+info.category+'</span>'
+          +'<span style="font-size:12px;color:var(--text2);">'+info.count+' question'+(info.count!==1?'s':'')+'</span>'
+          +'<span style="font-size:12px;color:var(--amber);font-weight:500;">● Visible to students (unmanaged)</span>'
+          +'</div></div>'
+          +'<div class="bank-actions">'
+          +'<button class="btn btn-primary btn-sm" onclick="adoptAssignment(\''+safeName+'\')">Add to Organizer</button>'
+          +'</div></div>';
+      });
+    }
   }
   html+='</div>';
   el.innerHTML=html;
+}
+
+function adoptAssignment(name) {
+  var groupQs=questions.filter(function(q){ return (q.assignment||'General')===name; });
+  var cat=groupQs.length?(groupQs[0].category||'HW'):'HW';
+  assignments.push({id:nextAssignmentId++,name:name,category:cat,visible:true,dueDate:''});
+  saveAssignments();
+  renderAssignments();
 }
 
 function bankItemHtml(q, actionHtml) {

@@ -378,6 +378,10 @@ grant select on student_results to service_role;
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
         Homework (HW)
       </div>
+      <div class="nav-item" id="nav-profile-student" onclick="showPanel('profile',this)">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+        Profile
+      </div>
       </div>
       <div id="teacher-nav" style="display:none;">
         <div class="nav-section">Teacher</div>
@@ -396,6 +400,10 @@ grant select on student_results to service_role;
         <div class="nav-item" id="nav-settings" onclick="showPanel('settings',this)">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg>
           Settings
+        </div>
+        <div class="nav-item" id="nav-profile-teacher" onclick="showPanel('profile',this)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
+          Profile
         </div>
         <div class="nav-section" style="margin-top:0.5rem;">Preview</div>
         <div class="nav-item" id="nav-student-view" onclick="enterStudentView()">
@@ -575,6 +583,16 @@ grant select on student_results to service_role;</pre>
           <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Deployment</div>
             <p style="font-size:14px;color:var(--text2);line-height:1.7;">To share this with students, upload <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">chemistry-hw.html</code> to <a href="https://vercel.com" target="_blank" style="color:var(--accent);">Vercel</a> or <a href="https://netlify.com" target="_blank" style="color:var(--accent);">Netlify</a> — both are free and take under 2 minutes. Students visit the URL, register with your class code, and their results are saved to Supabase automatically.</p>
+          </div>
+        </div>
+
+        <!-- PROFILE PANEL -->
+        <div id="panel-profile" class="panel">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Profile</div>
+            </div>
+            <div id="profile-content"></div>
           </div>
         </div>
 
@@ -915,11 +933,12 @@ function showPanel(name, el) {
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.remove('active'); });
   document.getElementById('panel-'+name).classList.add('active');
   if (el) el.classList.add('active');
-  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment Organizer', settings:'Settings' };
+  var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment Organizer', settings:'Settings', profile:'Profile' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
   if (name==='assignments') { editingAssignmentId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
+  if (name==='profile') renderProfile();
 }
 
 // ══════════════════════════════════════════
@@ -1422,6 +1441,37 @@ async function loadDashboard() {
   }
 
   document.getElementById('dashboard-content').innerHTML=html;
+}
+
+function renderProfile() {
+  var el = document.getElementById('profile-content'); if (!el) return;
+  var username = currentProfile ? currentProfile.username : '—';
+  var role = currentProfile ? currentProfile.role : '—';
+  var email = (currentUser && currentUser.email) ? currentUser.email : '—';
+  var lastSignIn = '—';
+  if (currentUser && currentUser.last_sign_in_at) {
+    var d = new Date(currentUser.last_sign_in_at);
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var h=d.getHours(), m=d.getMinutes();
+    lastSignIn = mo[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()
+      +' at '+(h===0?12:h>12?h-12:h)+':'+(m<10?'0'+m:m)+' '+(h<12?'AM':'PM');
+  }
+  var roleBadge = role==='teacher'
+    ? '<span class="badge badge-teacher">Teacher</span>'
+    : '<span class="badge badge-student">Student</span>';
+  var row = function(label, val) {
+    return '<div style="display:flex;align-items:baseline;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">'
+      +'<span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);min-width:110px;">'+label+'</span>'
+      +'<span style="font-size:14px;color:var(--text);">'+val+'</span>'
+      +'</div>';
+  };
+  el.innerHTML = row('Username', username)
+    + row('Role', roleBadge)
+    + row('Email', '<span style="font-family:\'DM Mono\',monospace;font-size:13px;">'+email+'</span>')
+    + row('Last sign-in', lastSignIn)
+    + '<div style="margin-top:1.25rem;">'
+    + '<button class="btn btn-secondary" onclick="doLogout()" style="width:auto;">Sign out</button>'
+    + '</div>';
 }
 
 function toggleDetail(id) {

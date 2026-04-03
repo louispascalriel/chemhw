@@ -219,6 +219,9 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .class-code-box { display: inline-flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 8px 14px; font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 1rem; }
 .dash-section-title { font-family: 'DM Serif Display', serif; font-size: 17px; color: var(--text); margin: 1.25rem 0 0.6rem; padding-bottom: 6px; border-bottom: 2px solid var(--border2); }
 .dash-section-title:first-child { margin-top: 0; }
+.answer-reveal { margin-top:10px; padding:10px 14px; background:var(--green-light); border:1px solid var(--green); border-radius:var(--radius); font-size:14px; color:var(--green); }
+.answer-reveal-val { font-weight:600; font-family:'DM Mono',monospace; }
+.readonly-banner { background:var(--amber-light); border:1px solid var(--amber); border-radius:var(--radius); padding:8px 14px; font-size:13px; color:var(--amber); margin-bottom:1rem; }
 .pass-badge { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 99px; }
 .pass-badge.pass { background: var(--green-light); color: var(--green); border: 1px solid var(--green); }
 .pass-badge.fail { background: var(--red-light); color: var(--red); border: 1px solid var(--red); }
@@ -974,7 +977,6 @@ function formatDueDate(dueISO) {
 }
 
 function showAssignment(name) {
-  if(isAssignmentPastDue(name)) return;
   studentAssignment=name;
   renderStudentQuestions(); updateScore();
 }
@@ -1005,9 +1007,9 @@ function renderStudentQuestions() {
       var dueLabel=aObj&&aObj.dueISO?'<div class="assignment-card-meta" style="margin-top:2px;'+(pastDue?'color:var(--red);':'')+'">'+formatDueDate(aObj.dueISO)+(pastDue?' — Closed':'')+'</div>':'';
       var safeName=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       if(pastDue){
-        html+='<div class="assignment-card" style="opacity:0.55;cursor:not-allowed;">'
+        html+='<div class="assignment-card" onclick="showAssignment(\''+safeName+'\')">'
           +'<div><div class="assignment-card-name">'+name+'</div>'+dueLabel+'</div>'
-          +'<div class="assignment-card-right"><span style="font-size:12px;font-weight:600;color:var(--red);background:var(--red-light);border:1px solid var(--red);padding:2px 8px;border-radius:99px;">Closed</span></div>'
+          +'<div class="assignment-card-right"><span style="font-size:12px;font-weight:600;color:var(--red);background:var(--red-light);border:1px solid var(--red);padding:2px 8px;border-radius:99px;">Closed</span><span style="color:var(--text3);font-size:20px;line-height:1;margin-left:8px;">›</span></div>'
           +'</div>';
       } else {
         html+='<div class="assignment-card" onclick="showAssignment(\''+safeName+'\')">'
@@ -1034,11 +1036,18 @@ function renderStudentQuestions() {
   container.innerHTML='';
 
   // Back button + title for HW assignment view
+  var readOnly = studentCategory==='HW' && studentAssignment!==null && isAssignmentPastDue(studentAssignment);
   if (studentCategory==='HW') {
     var backDiv=document.createElement('div');
     backDiv.className='assignment-back';
-    backDiv.innerHTML='<button class="btn btn-secondary btn-sm" onclick="backToAssignments()">← Assignments</button><span class="assignment-back-title">'+studentAssignment+'</span>';
+    backDiv.innerHTML='<button class="btn btn-secondary btn-sm" onclick="backToAssignments()">← Assignments</button><span class="assignment-back-title">'+studentAssignment+'</span>'+(readOnly?'<span style="font-size:12px;font-weight:600;color:var(--red);background:var(--red-light);border:1px solid var(--red);padding:2px 8px;border-radius:99px;">Closed</span>':'');
     container.appendChild(backDiv);
+  }
+  if (readOnly) {
+    var banner=document.createElement('div');
+    banner.className='readonly-banner';
+    banner.textContent='This assignment is closed. You can review the questions and correct answers below, but cannot submit new answers.';
+    container.appendChild(banner);
   }
   catQs.forEach(function(q,i) {
     var div=document.createElement('div');
@@ -1053,32 +1062,58 @@ function renderStudentQuestions() {
       figHtml+='</table></div>';
     }
     var body='';
-    if (q.type==='formula') {
-      body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
-          +'<div class="preview-render" id="sp-'+q.id+'"></div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
-    } else if (q.type==='sci') {
-      body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
-    } else if (q.type==='mc') {
-      body='<div class="mc-options" id="mcopts-'+q.id+'">';
-      var letters=['A','B','C','D','E','F'];
-      (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
-      body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
-      if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
-    } else if (q.type==='calc') {
-      body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
-          +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
-          +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+    if (readOnly) {
+      var answerHtml='';
+      if (q.type==='formula') {
+        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+parseChem(q.answers[0])+'</span></div>';
+      } else if (q.type==='sci') {
+        var exp=Math.floor(Math.log10(Math.abs(q.correctVal)));
+        var coeff=(q.correctVal/Math.pow(10,exp)).toFixed(3);
+        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+coeff+' × 10<sup>'+exp+'</sup></span></div>';
+      } else if (q.type==='calc') {
+        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+q.correctVal+(q.unit?' '+q.unit:'')+'</span></div>';
+      } else if (q.type==='mc') {
+        var letters=['A','B','C','D','E','F'];
+        answerHtml='<div class="mc-options">';
+        (q.options||[]).forEach(function(opt,oi){
+          var isCorrect=oi===q.correct;
+          answerHtml+='<div class="mc-option '+(isCorrect?'correct-opt':'disabled')+'" style="cursor:default;">'
+            +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>';
+        });
+        answerHtml+='</div>';
+        if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+q.explanation+'</div>';
+      }
+      body=(q.hint?'<div class="hint">'+q.hint+'</div>':'')+answerHtml;
+      div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div></div>'
+        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>';
+    } else {
+      if (q.type==='formula') {
+        body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
+            +'<div class="preview-render" id="sp-'+q.id+'"></div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
+      } else if (q.type==='sci') {
+        body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+      } else if (q.type==='mc') {
+        body='<div class="mc-options" id="mcopts-'+q.id+'">';
+        var letters=['A','B','C','D','E','F'];
+        (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
+        body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
+        if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
+      } else if (q.type==='calc') {
+        body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
+            +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
+            +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
+      }
+      div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
+        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
+        +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
+        +'<div class="result-msg" id="res-'+q.id+'"></div>';
+      updateAttemptUI(q.id);
     }
-    div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
-      +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
-      +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
-      +'<div class="result-msg" id="res-'+q.id+'"></div>';
     container.appendChild(div);
-    updateAttemptUI(q.id);
   });
 }
 

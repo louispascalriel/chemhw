@@ -217,6 +217,11 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .missed-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .missed-chip { background: var(--red-light); color: var(--red); font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 1px solid #e8c0c0; }
 .class-code-box { display: inline-flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border2); border-radius: var(--radius); padding: 8px 14px; font-family: 'DM Mono', monospace; font-size: 18px; font-weight: 500; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 1rem; }
+.dash-section-title { font-family: 'DM Serif Display', serif; font-size: 17px; color: var(--text); margin: 1.25rem 0 0.6rem; padding-bottom: 6px; border-bottom: 2px solid var(--border2); }
+.dash-section-title:first-child { margin-top: 0; }
+.pass-badge { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 99px; }
+.pass-badge.pass { background: var(--green-light); color: var(--green); border: 1px solid var(--green); }
+.pass-badge.fail { background: var(--red-light); color: var(--red); border: 1px solid var(--red); }
 
 /* ── MODAL ── */
 .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; }
@@ -438,6 +443,11 @@ grant select on student_results to service_role;
             <div style="margin-bottom:1rem;">
               <div style="font-size:13px;color:var(--text2);margin-bottom:6px;">Your class code — share this with students:</div>
               <div class="class-code-box" id="dash-class-code">—</div>
+            </div>
+            <div id="dash-controls" style="display:none;margin-bottom:1rem;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:13px;color:var(--text2);font-weight:500;">HW pass threshold:</span>
+              <input type="number" id="hw-threshold" min="0" max="100" value="70" class="form-input" style="width:72px;padding:5px 9px;font-size:13px;" onchange="loadDashboard()">
+              <span style="font-size:13px;color:var(--text2);">% correct to pass</span>
             </div>
             <div id="dashboard-content"><div class="loading">Loading results…</div></div>
           </div>
@@ -1226,76 +1236,131 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
 // ══════════════════════════════════════════
 //  TEACHER DASHBOARD
 // ══════════════════════════════════════════
+function buildDetailTable(qList, byQ) {
+  var thStyle='text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);';
+  var html='<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    +'<thead><tr>'
+    +'<th style="'+thStyle+'">Question</th>'
+    +'<th style="'+thStyle+'">Attempts &amp; answers</th>'
+    +'<th style="'+thStyle+'">Result</th>'
+    +'</tr></thead><tbody>';
+  qList.forEach(function(q) {
+    var attempts = byQ[q.id]||[];
+    var qText = q.text.replace(/<[^>]+>/g,'').substring(0,80);
+    if (!attempts.length) {
+      html+='<tr style="border-top:1px solid var(--border);">'
+        +'<td style="padding:6px 8px;max-width:260px;color:var(--text2);">'+qText+'</td>'
+        +'<td style="padding:6px 8px;color:var(--text3);">—</td>'
+        +'<td style="padding:6px 8px;color:var(--text3);">Not attempted</td>'
+        +'</tr>';
+    } else {
+      var finalCorrect=attempts.some(function(r){ return r.correct; });
+      var attHtml=attempts.map(function(r) {
+        var icon=r.correct?'✓':'✗', color=r.correct?'var(--green)':'var(--red)';
+        var ans=r.student_answer?' <code style="font-family:\'DM Mono\',monospace;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:12px;">'+r.student_answer+'</code>':'';
+        return '<span style="display:inline-flex;align-items:center;gap:3px;color:'+color+';margin-right:8px;white-space:nowrap;">'+icon+ans+'</span>';
+      }).join('');
+      var statusHtml=finalCorrect?'<span style="color:var(--green);font-weight:500;">Correct</span>':'<span style="color:var(--red);">Missed</span>';
+      html+='<tr style="border-top:1px solid var(--border);">'
+        +'<td style="padding:6px 8px;max-width:260px;color:var(--text2);">'+qText+'</td>'
+        +'<td style="padding:6px 8px;">'+attHtml+'</td>'
+        +'<td style="padding:6px 8px;">'+statusHtml+'</td>'
+        +'</tr>';
+    }
+  });
+  html+='</tbody></table>';
+  return html;
+}
+
 async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML='<div class="loading">Loading…</div>';
   var pr = await sbSelect('profiles', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&role=eq.student');
   var rr = await sbSelect('student_results', 'order=answered_at.asc&limit=5000');
   var profiles = pr.data, results = rr.data;
+  var ctrlEl = document.getElementById('dash-controls');
   if (!profiles || !results) {
+    ctrlEl.style.display='none';
     var errDetail = (pr.error||rr.error) ? JSON.stringify(pr.error||rr.error) : 'Unknown error';
     var hint = !CFG.serviceKey ? ' <br><small>Tip: add your Supabase <strong>Service Role Key</strong> in Settings → Admin access so the teacher account can read all student data.</small>' : '';
     document.getElementById('dashboard-content').innerHTML='<div class="empty">Could not load data: '+errDetail+hint+'</div>'; return;
   }
-  if (!profiles.length) { document.getElementById('dashboard-content').innerHTML='<div class="empty">No students have registered yet.</div>'; return; }
+  if (!profiles.length) {
+    ctrlEl.style.display='none';
+    document.getElementById('dashboard-content').innerHTML='<div class="empty">No students have registered yet.</div>'; return;
+  }
+  ctrlEl.style.display='flex';
 
-  var html='<div style="overflow-x:auto;"><table class="dash-table"><thead><tr><th>Student</th><th>Correct</th><th>Success rate</th><th></th></tr></thead><tbody>';
-  profiles.forEach(function(p) {
-    var pResults = results.filter(function(r){ return r.student_id===p.id; });
-    // Group attempts by question_id, preserving order
-    var byQ = {};
-    pResults.forEach(function(r) {
-      if (!byQ[r.question_id]) byQ[r.question_id] = [];
-      byQ[r.question_id].push(r);
+  var hwThreshold = parseInt(document.getElementById('hw-threshold').value)||70;
+  var hwQs = questions.filter(function(q){ return (q.category||'HW')==='HW' && !q.hidden; });
+  var iceQs = questions.filter(function(q){ return q.category==='ICE' && !q.hidden; });
+  var hwQIds = hwQs.map(function(q){ return q.id; });
+  var iceQIds = iceQs.map(function(q){ return q.id; });
+
+  var html = '';
+
+  // ── HW SECTION ──
+  html += '<div class="dash-section-title">Homework (HW)</div>';
+  if (!hwQs.length) {
+    html += '<div class="empty" style="padding:1rem;margin-bottom:1rem;">No HW questions assigned.</div>';
+  } else {
+    html += '<div style="overflow-x:auto;margin-bottom:1.5rem;"><table class="dash-table"><thead><tr>'
+      +'<th>Student</th><th>Score</th><th>Pass / Fail</th><th></th>'
+      +'</tr></thead><tbody>';
+    profiles.forEach(function(p) {
+      var pResults = results.filter(function(r){ return r.student_id===p.id && hwQIds.indexOf(r.question_id)!==-1; });
+      var byQ = {};
+      pResults.forEach(function(r){ if(!byQ[r.question_id]) byQ[r.question_id]=[]; byQ[r.question_id].push(r); });
+      var correct = hwQIds.filter(function(qid){ return byQ[qid]&&byQ[qid].some(function(r){ return r.correct; }); }).length;
+      var total = hwQs.length;
+      var pct = total>0 ? Math.round(correct/total*100) : 0;
+      var passed = pct >= hwThreshold;
+      var fillColor = passed ? 'var(--green)' : 'var(--red)';
+      var badge = '<span class="pass-badge '+(passed?'pass':'fail')+'">'+(passed?'Pass':'Fail')+'</span>';
+      html += '<tr style="cursor:pointer;" onclick="toggleDetail(\'hwdet-'+p.id+'\')">'
+        +'<td style="font-weight:500;">'+p.username+'</td>'
+        +'<td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill" style="width:'+pct+'%;background:'+fillColor+';"></div></div><span style="font-size:13px;">'+correct+' / '+total+' ('+pct+'%)</span></div></td>'
+        +'<td>'+badge+'</td>'
+        +'<td style="font-size:12px;color:var(--text3);white-space:nowrap;">▶ details</td>'
+        +'</tr>';
+      html += '<tr id="hwdet-'+p.id+'" style="display:none;"><td colspan="4" style="padding:0;">'
+        +'<div style="background:var(--surface2);padding:10px 14px;border-bottom:1px solid var(--border);">'
+        +buildDetailTable(hwQs, byQ)
+        +'</div></td></tr>';
     });
-    var qIds = Object.keys(byQ);
-    var correctQs = qIds.filter(function(qid){ return byQ[qid].some(function(r){ return r.correct; }); }).length;
-    var attemptedQs = qIds.length;
-    var pct = attemptedQs>0 ? Math.round(correctQs/attemptedQs*100) : 0;
-    var fillColor = pct>=80?'var(--green)':pct>=50?'#d4881e':'var(--red)';
+    html += '</tbody></table></div>';
+  }
 
-    html+='<tr style="cursor:pointer;" onclick="toggleDetail(\'det-'+p.id+'\')">'
-      +'<td style="font-weight:500;">'+p.username+'</td>'
-      +'<td>'+correctQs+' / '+attemptedQs+' attempted</td>'
-      +'<td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill" style="width:'+pct+'%;background:'+fillColor+';"></div></div><span style="font-size:13px;min-width:34px;">'+pct+'%</span></div></td>'
-      +'<td style="font-size:12px;color:var(--text3);white-space:nowrap;">▶ details</td>'
-      +'</tr>';
+  // ── ICE SECTION ──
+  html += '<div class="dash-section-title">In-Class Exercises (ICE)</div>';
+  if (!iceQs.length) {
+    html += '<div class="empty" style="padding:1rem;">No ICE questions assigned.</div>';
+  } else {
+    html += '<div style="overflow-x:auto;"><table class="dash-table"><thead><tr>'
+      +'<th>Student</th><th>Correct</th><th>Wrong</th><th>Not Attempted</th><th></th>'
+      +'</tr></thead><tbody>';
+    profiles.forEach(function(p) {
+      var pResults = results.filter(function(r){ return r.student_id===p.id && iceQIds.indexOf(r.question_id)!==-1; });
+      var byQ = {};
+      pResults.forEach(function(r){ if(!byQ[r.question_id]) byQ[r.question_id]=[]; byQ[r.question_id].push(r); });
+      var correct = iceQIds.filter(function(qid){ return byQ[qid]&&byQ[qid].some(function(r){ return r.correct; }); }).length;
+      var attempted = Object.keys(byQ).length;
+      var wrong = attempted - correct;
+      var notAttempted = iceQs.length - attempted;
+      html += '<tr style="cursor:pointer;" onclick="toggleDetail(\'icedet-'+p.id+'\')">'
+        +'<td style="font-weight:500;">'+p.username+'</td>'
+        +'<td style="color:var(--green);font-weight:500;">'+correct+'</td>'
+        +'<td style="color:var(--red);">'+wrong+'</td>'
+        +'<td style="color:var(--text3);">'+notAttempted+'</td>'
+        +'<td style="font-size:12px;color:var(--text3);white-space:nowrap;">▶ details</td>'
+        +'</tr>';
+      html += '<tr id="icedet-'+p.id+'" style="display:none;"><td colspan="5" style="padding:0;">'
+        +'<div style="background:var(--surface2);padding:10px 14px;border-bottom:1px solid var(--border);">'
+        +buildDetailTable(iceQs, byQ)
+        +'</div></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
 
-    // Expandable detail row
-    html+='<tr id="det-'+p.id+'" style="display:none;"><td colspan="4" style="padding:0;">';
-    html+='<div style="background:var(--surface2);padding:10px 14px;border-bottom:1px solid var(--border);">';
-    if (!qIds.length) {
-      html+='<div style="font-size:13px;color:var(--text3);">No attempts yet.</div>';
-    } else {
-      html+='<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        +'<thead><tr>'
-        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Question</th>'
-        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Attempts &amp; answers</th>'
-        +'<th style="text-align:left;padding:5px 8px;font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text2);border-bottom:1px solid var(--border);">Result</th>'
-        +'</tr></thead><tbody>';
-      qIds.forEach(function(qid) {
-        var attempts = byQ[qid];
-        var finalCorrect = attempts.some(function(r){ return r.correct; });
-        var qText = (attempts[0].question_text||('Q'+qid)).substring(0,80);
-        var attHtml = attempts.map(function(r) {
-          var icon = r.correct ? '✓' : '✗';
-          var color = r.correct ? 'var(--green)' : 'var(--red)';
-          var ans = r.student_answer ? ' <code style="font-family:\'DM Mono\',monospace;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:12px;">'+r.student_answer+'</code>' : '';
-          return '<span style="display:inline-flex;align-items:center;gap:3px;color:'+color+';margin-right:8px;white-space:nowrap;">'+icon+ans+'</span>';
-        }).join('');
-        var statusHtml = finalCorrect
-          ? '<span style="color:var(--green);font-weight:500;">Correct</span>'
-          : '<span style="color:var(--red);">Missed</span>';
-        html+='<tr style="border-top:1px solid var(--border);">'
-          +'<td style="padding:6px 8px;max-width:260px;color:var(--text2);font-size:13px;">'+qText+'</td>'
-          +'<td style="padding:6px 8px;">'+attHtml+'</td>'
-          +'<td style="padding:6px 8px;">'+statusHtml+'</td>'
-          +'</tr>';
-      });
-      html+='</tbody></table>';
-    }
-    html+='</div></td></tr>';
-  });
-  html+='</tbody></table></div>';
   document.getElementById('dashboard-content').innerHTML=html;
 }
 

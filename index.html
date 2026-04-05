@@ -268,6 +268,7 @@ sub { font-size: 0.75em; position: relative; top: 0.3em; line-height: 0; }
   email text,
   first_name text,
   last_name text,
+  login_history jsonb default '[]'::jsonb,
   created_at timestamptz default now()
 );
 create table if not exists student_results (
@@ -297,7 +298,8 @@ grant select on student_results to service_role;
 -- alter table student_results add column if not exists student_answer text;
 -- alter table profiles add column if not exists email text;
 -- alter table profiles add column if not exists first_name text;
--- alter table profiles add column if not exists last_name text;</pre>
+-- alter table profiles add column if not exists last_name text;
+-- alter table profiles add column if not exists login_history jsonb default '[]'::jsonb;</pre>
           <button class="btn btn-secondary btn-sm" onclick="copySQL()" style="margin-top:6px;">Copy SQL</button>
         </div>
       </div>
@@ -935,6 +937,16 @@ async function loadProfile(user) {
       body: JSON.stringify({ role: 'teacher' })
     });
   }
+  if (currentProfile && currentProfile.role === 'student') {
+    var history = Array.isArray(currentProfile.login_history) ? currentProfile.login_history : [];
+    history = [new Date().toISOString()].concat(history).slice(0, 5);
+    currentProfile.login_history = history;
+    fetch(CFG.url + '/rest/v1/profiles?id=eq.' + user.id, {
+      method: 'PATCH',
+      headers: Object.assign({}, sbHeaders(), { 'Prefer': 'return=minimal' }),
+      body: JSON.stringify({ login_history: history })
+    });
+  }
 }
 
 async function doLogout() {
@@ -1566,12 +1578,19 @@ function renderProfile() {
       + '<button class="btn btn-secondary" onclick="cancelProfileEdit()" style="width:auto;">Cancel</button>'
       + '</div>';
   } else {
+    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var fmtTs=function(iso){ var d=new Date(iso),h=d.getHours(),m=d.getMinutes(); return mo[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()+' at '+(h===0?12:h>12?h-12:h)+':'+(m<10?'0'+m:m)+' '+(h<12?'AM':'PM'); };
+    var loginHistoryHtml='<span style="color:var(--text3);font-style:italic;">None recorded</span>';
+    if(isStudent&&Array.isArray(currentProfile&&currentProfile.login_history)&&currentProfile.login_history.length){
+      loginHistoryHtml='<ol style="margin:0;padding-left:1.2em;font-size:13px;line-height:1.8;">'+currentProfile.login_history.map(function(ts){ return '<li>'+fmtTs(ts)+'</li>'; }).join('')+'</ol>';
+    }
     el.innerHTML = (isStudent ? row('First name', firstName||'<span style="color:var(--text3);font-style:italic;">Not set</span>')
         + row('Last name', lastName||'<span style="color:var(--text3);font-style:italic;">Not set</span>') : '')
       + row('Username', username)
       + row('Role', roleBadge)
       + row('Email', '<span style="font-family:\'DM Mono\',monospace;font-size:13px;">'+email+'</span>')
       + row('Last sign-in', lastSignIn)
+      + (isStudent ? row('Login history', loginHistoryHtml) : '')
       + '<span id="profile-note" style="font-size:13px;color:var(--green);display:block;min-height:18px;margin-top:0.75rem;"></span>'
       + '<div style="display:flex;gap:8px;margin-top:0.5rem;">'
       + '<button class="btn btn-secondary" onclick="profileEditMode=true;renderProfile();" style="width:auto;">Edit profile</button>'

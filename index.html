@@ -1007,7 +1007,7 @@ function showPanel(name, el) {
   var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment Organizer', settings:'Settings', profile:'Profile' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
-  if (name==='assignments') { editingAssignmentId=null; renderAssignments(); }
+  if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
   if (name==='profile') renderProfile();
 }
@@ -1686,7 +1686,7 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 //  ASSIGNMENTS
 // ══════════════════════════════════════════
-var assignments=[], nextAssignmentId=1, editingAssignmentId=null, newAsgnCategory='HW';
+var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, newAsgnCategory='HW';
 
 function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
 
@@ -1729,8 +1729,19 @@ function renderAssignmentList(el) {
       var qCount=questions.filter(function(q){ return (q.assignment||'General')===a.name; }).length;
       var dueStr=a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'';
       var visColor=a.visible?'var(--green)':'var(--text3)';
+      var isRenaming=renamingAssignmentId===a.id;
+      var nameHtml=isRenaming
+        ?'<div style="display:flex;align-items:center;gap:6px;"><input class="form-input" id="rename-input-'+a.id+'" value="'+a.name.replace(/"/g,'&quot;')+'" style="font-size:14px;font-weight:600;padding:4px 8px;width:200px;" onkeydown="if(event.key===\'Enter\')saveRename('+a.id+');if(event.key===\'Escape\')cancelRename();"></div>'
+        :'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>';
+      var actionsHtml=isRenaming
+        ?'<button class="btn btn-primary btn-sm" onclick="saveRename('+a.id+')">Save</button>'
+         +'<button class="btn btn-secondary btn-sm" onclick="cancelRename()">Cancel</button>'
+        :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
+         +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
+         +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
+         +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
       html+='<div class="bank-item"><div class="bank-item-body">'
-        +'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>'
+        +nameHtml
         +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
         +'<span class="badge badge-'+a.category.toLowerCase()+'">'+a.category+'</span>'
         +'<span style="font-size:12px;color:var(--text2);">'+qCount+' question'+(qCount!==1?'s':'')+'</span>'
@@ -1738,9 +1749,7 @@ function renderAssignmentList(el) {
         +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+(a.visible?'Visible to students':'Hidden from students')+'</span>'
         +'</div></div>'
         +'<div class="bank-actions">'
-        +'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
-        +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
-        +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>'
+        +actionsHtml
         +'</div></div>';
     });
     if(implicitNames.length){
@@ -1880,6 +1889,22 @@ function deleteAssignment(id) {
 
 function openAssignmentEditor(id) { editingAssignmentId=id; renderAssignments(); }
 function closeAssignmentEditor() { editingAssignmentId=null; renderAssignments(); }
+
+function startRename(id) { renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }
+function cancelRename() { renamingAssignmentId=null; renderAssignments(); }
+function saveRename(id) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  var inp=document.getElementById('rename-input-'+id); if(!inp) return;
+  var newName=inp.value.trim();
+  if(!newName){ inp.focus(); return; }
+  if(newName!==a.name && assignments.some(function(x){ return x.id!==id && x.name===newName; })){ inp.focus(); showAsgnNote('An assignment with that name already exists.'); return; }
+  var oldName=a.name;
+  a.name=newName;
+  questions.forEach(function(q){ if((q.assignment||'General')===oldName) q.assignment=newName; });
+  renamingAssignmentId=null;
+  saveAssignments(); saveQuestions();
+  renderAssignments(); renderBank(); renderStudentQuestions();
+}
 
 function addQToAssignment(qid) {
   var a=assignments.find(function(x){ return x.id===editingAssignmentId; }); if(!a) return;

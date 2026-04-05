@@ -1007,7 +1007,7 @@ function showPanel(name, el) {
   var titles = { questions:'Questions', dashboard:'Student results', builder:'Question builder', assignments:'Assignment Organizer', settings:'Settings', profile:'Profile' };
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
-  if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; renderAssignments(); }
+  if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; editingDueDateId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
   if (name==='profile') renderProfile();
 }
@@ -1686,7 +1686,7 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 //  ASSIGNMENTS
 // ══════════════════════════════════════════
-var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, newAsgnCategory='HW';
+var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, newAsgnCategory='HW';
 
 function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
 
@@ -1727,17 +1727,30 @@ function renderAssignmentList(el) {
   } else {
     assignments.forEach(function(a){
       var qCount=questions.filter(function(q){ return (q.assignment||'General')===a.name; }).length;
-      var dueStr=a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'';
       var visColor=a.visible?'var(--green)':'var(--text3)';
       var isRenaming=renamingAssignmentId===a.id;
+      var isEditingDue=editingDueDateId===a.id;
+      var dueParts=a.dueISO?a.dueISO.split('T'):['','23:59'];
+      var dueStr=isEditingDue
+        ?'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">'
+          +'<input class="form-input" id="due-date-input-'+a.id+'" type="date" value="'+dueParts[0]+'" style="font-size:12px;padding:3px 7px;width:145px;">'
+          +'<input class="form-input" id="due-time-input-'+a.id+'" type="time" value="'+(dueParts[1]||'23:59')+'" style="font-size:12px;padding:3px 7px;width:100px;">'
+          +'<span style="font-size:12px;color:var(--text3);">EST</span>'
+          +'<button class="btn btn-secondary btn-sm" style="font-size:11px;padding:2px 7px;" onclick="clearDueDate('+a.id+')">Clear</button>'
+          +'</div>'
+        :a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'';
       var nameHtml=isRenaming
         ?'<div style="display:flex;align-items:center;gap:6px;"><input class="form-input" id="rename-input-'+a.id+'" value="'+a.name.replace(/"/g,'&quot;')+'" style="font-size:14px;font-weight:600;padding:4px 8px;width:200px;" onkeydown="if(event.key===\'Enter\')saveRename('+a.id+');if(event.key===\'Escape\')cancelRename();"></div>'
         :'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>';
       var actionsHtml=isRenaming
         ?'<button class="btn btn-primary btn-sm" onclick="saveRename('+a.id+')">Save</button>'
          +'<button class="btn btn-secondary btn-sm" onclick="cancelRename()">Cancel</button>'
+        :isEditingDue
+        ?'<button class="btn btn-primary btn-sm" onclick="saveEditDue('+a.id+')">Save</button>'
+         +'<button class="btn btn-secondary btn-sm" onclick="cancelEditDue()">Cancel</button>'
         :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
          +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
+         +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
          +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
          +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
       html+='<div class="bank-item"><div class="bank-item-body">'
@@ -1890,7 +1903,7 @@ function deleteAssignment(id) {
 function openAssignmentEditor(id) { editingAssignmentId=id; renderAssignments(); }
 function closeAssignmentEditor() { editingAssignmentId=null; renderAssignments(); }
 
-function startRename(id) { renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }
+function startRename(id) { editingDueDateId=null; renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }
 function cancelRename() { renamingAssignmentId=null; renderAssignments(); }
 function saveRename(id) {
   var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
@@ -1904,6 +1917,30 @@ function saveRename(id) {
   renamingAssignmentId=null;
   saveAssignments(); saveQuestions();
   renderAssignments(); renderBank(); renderStudentQuestions();
+}
+
+function startEditDue(id) { renamingAssignmentId=null; editingDueDateId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('due-date-input-'+id); if(el) el.focus(); },0); }
+function cancelEditDue() { editingDueDateId=null; renderAssignments(); }
+function saveEditDue(id) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  var dateEl=document.getElementById('due-date-input-'+id);
+  var timeEl=document.getElementById('due-time-input-'+id);
+  if(!dateEl||!timeEl) return;
+  var date=dateEl.value, time=timeEl.value||'23:59';
+  if(date){
+    a.dueISO=date+'T'+time;
+    a.dueDate=date+' at '+formatTime12(time)+' EST';
+  } else {
+    a.dueISO=''; a.dueDate='';
+  }
+  editingDueDateId=null;
+  saveAssignments(); renderAssignments(); renderStudentQuestions();
+}
+function clearDueDate(id) {
+  var dateEl=document.getElementById('due-date-input-'+id);
+  var timeEl=document.getElementById('due-time-input-'+id);
+  if(dateEl) dateEl.value='';
+  if(timeEl) timeEl.value='23:59';
 }
 
 function addQToAssignment(qid) {

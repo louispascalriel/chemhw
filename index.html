@@ -634,16 +634,87 @@ grant select on student_results to service_role;</pre>
   </div>
 </div>
 
-<!-- Edit answers modal -->
+<!-- Edit question modal -->
 <div class="modal-backdrop" id="edit-modal">
-  <div class="modal">
-    <div class="modal-title">Edit accepted answers</div>
-    <p id="edit-modal-q" style="font-size:13px;color:var(--text2);margin-bottom:12px;"></p>
-    <div class="form-label" style="margin-bottom:6px;">Accepted answers</div>
-    <div class="answer-tag-list" id="edit-tags"></div>
-    <div class="add-answer-row">
-      <input class="form-input" id="edit-new-ans" placeholder="Type and press Add" style="font-size:13px;font-family:'DM Mono',monospace;">
-      <button class="btn btn-primary btn-sm" onclick="addEditAns()">Add</button>
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-title">Edit question</div>
+    <div class="form-group">
+      <label class="form-label">Question text</label>
+      <textarea class="form-input" id="eq-text" rows="3" style="resize:vertical;"></textarea>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="form-group" style="flex:1;min-width:140px;margin-bottom:10px;">
+        <label class="form-label">Section</label>
+        <input class="form-input" id="eq-section" placeholder="e.g. Unit 3">
+      </div>
+      <div class="form-group" style="flex:2;min-width:180px;margin-bottom:10px;">
+        <label class="form-label">Keywords <span style="font-weight:400;font-size:11px;">(comma-separated)</span></label>
+        <input class="form-input" id="eq-keywords" placeholder="e.g. stoichiometry, moles">
+      </div>
+    </div>
+    <!-- Formula fields -->
+    <div id="eq-formula-fields">
+      <div class="form-label" style="margin-bottom:6px;">Accepted answers</div>
+      <div class="answer-tag-list" id="edit-tags"></div>
+      <div class="add-answer-row">
+        <input class="form-input" id="edit-new-ans" placeholder="Type and press Add" style="font-size:13px;font-family:'DM Mono',monospace;">
+        <button class="btn btn-primary btn-sm" onclick="addEditAns()">Add</button>
+      </div>
+      <div class="form-group" style="margin-top:10px;margin-bottom:0;">
+        <label class="form-label">Hint <span style="font-weight:400;font-size:11px;">(optional)</span></label>
+        <input class="form-input" id="eq-formula-hint" placeholder="Optional hint for students">
+      </div>
+    </div>
+    <!-- Sci fields -->
+    <div id="eq-sci-fields" style="display:none;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:1;min-width:100px;margin-bottom:10px;">
+          <label class="form-label">Coefficient</label>
+          <input class="form-input" id="eq-sci-coeff" type="number" step="any" placeholder="e.g. 6.022">
+        </div>
+        <div class="form-group" style="flex:1;min-width:100px;margin-bottom:10px;">
+          <label class="form-label">Exponent (×10^)</label>
+          <input class="form-input" id="eq-sci-exp" type="number" placeholder="e.g. 23">
+        </div>
+        <div class="form-group" style="flex:1;min-width:100px;margin-bottom:10px;">
+          <label class="form-label">Tolerance %</label>
+          <input class="form-input" id="eq-sci-tol" type="number" step="any" placeholder="1">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Hint <span style="font-weight:400;font-size:11px;">(optional)</span></label>
+        <input class="form-input" id="eq-sci-hint" placeholder="Optional hint for students">
+      </div>
+    </div>
+    <!-- MC fields -->
+    <div id="eq-mc-fields" style="display:none;">
+      <div class="form-label" style="margin-bottom:6px;">Options <span style="font-weight:400;font-size:11px;">(select the correct one)</span></div>
+      <div id="eq-mc-options"></div>
+      <div class="form-group" style="margin-top:10px;margin-bottom:0;">
+        <label class="form-label">Explanation <span style="font-weight:400;font-size:11px;">(optional, shown after answering)</span></label>
+        <input class="form-input" id="eq-mc-explain" placeholder="Optional explanation">
+      </div>
+    </div>
+    <!-- Calc fields -->
+    <div id="eq-calc-fields" style="display:none;">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <div class="form-group" style="flex:2;min-width:140px;margin-bottom:10px;">
+          <label class="form-label">Correct value</label>
+          <input class="form-input" id="eq-calc-val" type="number" step="any" placeholder="e.g. 12.5">
+        </div>
+        <div class="form-group" style="flex:1;min-width:100px;margin-bottom:10px;">
+          <label class="form-label">Unit <span style="font-weight:400;font-size:11px;">(optional)</span></label>
+          <input class="form-input" id="eq-calc-unit" placeholder="e.g. g/mol">
+        </div>
+        <div class="form-group" style="flex:1;min-width:100px;margin-bottom:10px;">
+          <label class="form-label">Tolerance %</label>
+          <input class="form-input" id="eq-calc-tol" type="number" step="any" placeholder="2">
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Hint <span style="font-weight:400;font-size:11px;">(optional)</span></label>
+        <input class="form-input" id="eq-calc-hint" placeholder="Optional hint for students">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
@@ -1711,7 +1782,7 @@ function bankItemHtml(q, actionHtml) {
     +'<span class="badge badge-'+q.type+'">'+tl[q.type]+'</span>'
     +(q.section?'<span style="font-size:11px;color:var(--text2);">'+q.section+'</span>':'')
     +(q.keywords&&q.keywords.length?'<span style="font-size:11px;color:var(--accent);">'+q.keywords.join(', ')+'</span>':'')
-    +'</div></div><div class="bank-actions">'+actionHtml+'</div></div>';
+    +'</div></div><div class="bank-actions"><button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit</button>'+actionHtml+'</div></div>';
 }
 
 function renderAssignmentEditor(el) {
@@ -1870,7 +1941,7 @@ function renderBank() {
     var hiddenNote=isICE&&q.hidden?' <span style="font-size:11px;color:var(--text3);font-style:italic;">(hidden)</span>':'';
     var div=document.createElement('div');
     div.className='bank-item'; if(isICE&&q.hidden) div.style.opacity='0.55';
-    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+hiddenNote+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div>'+kwHtml+'</div><div class="bank-actions">'+visBtn+(q.type==='formula'?'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit answers</button>':'')+'<button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
+    div.innerHTML='<div class="bank-item-body"><div class="bank-item-q">Q'+(i+1)+'. '+q.text.replace(/<[^>]+>/g,'').substring(0,80)+hiddenNote+'</div><div class="bank-item-meta" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;">'+meta+'</div>'+kwHtml+'</div><div class="bank-actions">'+visBtn+'<button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit</button><button class="btn btn-danger btn-sm" onclick="deleteQ('+q.id+')">Remove</button></div>';
     el.appendChild(div);
   });
 }
@@ -1977,16 +2048,70 @@ function downloadCSVTemplate() {
 }
 
 // ══════════════════════════════════════════
-//  EDIT ANSWERS MODAL
+//  EDIT QUESTION MODAL
 // ══════════════════════════════════════════
-var editModalQid=null, editModalAnswers=[];
+var editModalQid=null, editModalAnswers=[], editMCOptions=[], editMCCorrect=0;
 
 function openEditModal(qid) {
   var q=questions.find(function(x){ return x.id===qid; }); if(!q) return;
-  editModalQid=qid; editModalAnswers=q.answers.slice();
-  document.getElementById('edit-modal-q').textContent=q.text.replace(/<[^>]+>/g,'');
-  renderEditTags();
+  editModalQid=qid;
+  document.getElementById('eq-text').value=q.text;
+  document.getElementById('eq-section').value=q.section||'';
+  document.getElementById('eq-keywords').value=(q.keywords||[]).join(', ');
+  ['eq-formula-fields','eq-sci-fields','eq-mc-fields','eq-calc-fields'].forEach(function(id){
+    document.getElementById(id).style.display='none';
+  });
+  if(q.type==='formula'){
+    editModalAnswers=q.answers.slice();
+    document.getElementById('eq-formula-hint').value=q.hint||'';
+    document.getElementById('edit-new-ans').value='';
+    renderEditTags();
+    document.getElementById('eq-formula-fields').style.display='';
+  } else if(q.type==='sci'){
+    var exp=q.correctVal===0?0:Math.floor(Math.log10(Math.abs(q.correctVal)));
+    var coeff=Math.round((q.correctVal/Math.pow(10,exp))*1e10)/1e10;
+    document.getElementById('eq-sci-coeff').value=coeff;
+    document.getElementById('eq-sci-exp').value=exp;
+    document.getElementById('eq-sci-tol').value=Math.round((q.tol||0.01)*100*1000)/1000;
+    document.getElementById('eq-sci-hint').value=q.hint||'';
+    document.getElementById('eq-sci-fields').style.display='';
+  } else if(q.type==='mc'){
+    editMCOptions=(q.options||[]).slice();
+    editMCCorrect=q.correct!==undefined?q.correct:0;
+    document.getElementById('eq-mc-explain').value=q.explanation||'';
+    renderEditMCOptions();
+    document.getElementById('eq-mc-fields').style.display='';
+  } else if(q.type==='calc'){
+    document.getElementById('eq-calc-val').value=q.correctVal;
+    document.getElementById('eq-calc-unit').value=q.unit||'';
+    document.getElementById('eq-calc-tol').value=Math.round((q.tol||0.02)*100*1000)/1000;
+    document.getElementById('eq-calc-hint').value=q.hint||'';
+    document.getElementById('eq-calc-fields').style.display='';
+  }
   document.getElementById('edit-modal').classList.add('open');
+}
+function renderEditMCOptions() {
+  var el=document.getElementById('eq-mc-options'); el.innerHTML='';
+  editMCOptions.forEach(function(opt,i){
+    var div=document.createElement('div');
+    div.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
+    div.innerHTML='<input type="radio" name="eq-mc-correct" value="'+i+'" style="accent-color:var(--accent);"'+(editMCCorrect===i?' checked':'')+' onchange="editMCCorrect='+i+'">'
+      +'<input class="form-input" value="'+opt.replace(/"/g,'&quot;')+'" oninput="editMCOptions['+i+']=this.value" style="flex:1;font-size:13px;">'
+      +(editMCOptions.length>2?'<button class="btn btn-danger btn-sm" style="padding:4px 8px;" onclick="removeEditMCOpt('+i+')">✕</button>':'');
+    el.appendChild(div);
+  });
+  if(editMCOptions.length<5){
+    var addBtn=document.createElement('button');
+    addBtn.className='btn btn-secondary btn-sm'; addBtn.style.marginTop='4px';
+    addBtn.textContent='+ Add option';
+    addBtn.onclick=function(){ editMCOptions.push(''); renderEditMCOptions(); };
+    el.appendChild(addBtn);
+  }
+}
+function removeEditMCOpt(i){
+  editMCOptions.splice(i,1);
+  if(editMCCorrect>=editMCOptions.length) editMCCorrect=0;
+  renderEditMCOptions();
 }
 function renderEditTags() {
   var el=document.getElementById('edit-tags'); el.innerHTML='';
@@ -1996,20 +2121,42 @@ function renderEditTags() {
     el.appendChild(span);
   });
 }
-function removeEditAns(i) { editModalAnswers.splice(i,1); renderEditTags(); }
-function addEditAns() {
+function removeEditAns(i){ editModalAnswers.splice(i,1); renderEditTags(); }
+function addEditAns(){
   var inp=document.getElementById('edit-new-ans');
   var val=normChem(inp.value.trim()); if(!val) return;
-  if (!editModalAnswers.includes(val)) editModalAnswers.push(val);
+  if(!editModalAnswers.includes(val)) editModalAnswers.push(val);
   inp.value=''; renderEditTags();
 }
-function saveEditModal() {
-  var q=questions.find(function(x){ return x.id===editModalQid; });
-  if (q&&editModalAnswers.length>0) q.answers=editModalAnswers.slice();
+function saveEditModal(){
+  var q=questions.find(function(x){ return x.id===editModalQid; }); if(!q) return;
+  var newText=document.getElementById('eq-text').value.trim(); if(!newText) return;
+  q.text=newText;
+  q.section=document.getElementById('eq-section').value.trim();
+  q.keywords=(document.getElementById('eq-keywords').value.trim()||'').split(',').map(function(k){ return k.trim().toLowerCase(); }).filter(Boolean);
+  if(q.type==='formula'){
+    if(editModalAnswers.length>0) q.answers=editModalAnswers.slice();
+    q.hint=document.getElementById('eq-formula-hint').value.trim();
+  } else if(q.type==='sci'){
+    var c=parseFloat(document.getElementById('eq-sci-coeff').value), e=parseInt(document.getElementById('eq-sci-exp').value);
+    if(!isNaN(c)&&!isNaN(e)) q.correctVal=c*Math.pow(10,e);
+    q.tol=Math.max(0.001,(parseFloat(document.getElementById('eq-sci-tol').value)||1)/100);
+    q.hint=document.getElementById('eq-sci-hint').value.trim();
+  } else if(q.type==='mc'){
+    var opts=editMCOptions.filter(function(o){ return o.trim(); });
+    if(opts.length>=2){ q.options=opts; q.correct=Math.min(editMCCorrect,opts.length-1); }
+    q.explanation=document.getElementById('eq-mc-explain').value.trim();
+  } else if(q.type==='calc'){
+    var val=parseFloat(document.getElementById('eq-calc-val').value);
+    if(!isNaN(val)) q.correctVal=val;
+    q.unit=document.getElementById('eq-calc-unit').value.trim();
+    q.tol=Math.max(0,(parseFloat(document.getElementById('eq-calc-tol').value)||2)/100);
+    q.hint=document.getElementById('eq-calc-hint').value.trim();
+  }
   saveQuestions();
-  closeEditModal(); renderBank();
+  closeEditModal(); renderBank(); renderAssignments(); renderStudentQuestions();
 }
-function closeEditModal() { document.getElementById('edit-modal').classList.remove('open'); }
+function closeEditModal(){ document.getElementById('edit-modal').classList.remove('open'); }
 document.getElementById('edit-new-ans').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); addEditAns(); } });
 document.getElementById('edit-modal').addEventListener('click',function(e){ if(e.target===this) closeEditModal(); });
 function closeImportModal() { document.getElementById('import-modal').classList.remove('open'); }

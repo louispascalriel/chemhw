@@ -939,7 +939,8 @@ async function loadProfile(user) {
   }
   if (currentProfile && currentProfile.role === 'student') {
     var history = Array.isArray(currentProfile.login_history) ? currentProfile.login_history : [];
-    history = [new Date().toISOString()].concat(history).slice(0, 5);
+    var estStr = new Date().toLocaleString('en-US', {timeZone:'America/New_York',month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}) + ' EST';
+    history = [estStr].concat(history).slice(0, 5);
     currentProfile.login_history = history;
     fetch(CFG.url + '/rest/v1/profiles?id=eq.' + user.id, {
       method: 'PATCH',
@@ -1578,11 +1579,9 @@ function renderProfile() {
       + '<button class="btn btn-secondary" onclick="cancelProfileEdit()" style="width:auto;">Cancel</button>'
       + '</div>';
   } else {
-    var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var fmtTs=function(iso){ var d=new Date(iso),h=d.getHours(),m=d.getMinutes(); return mo[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()+' at '+(h===0?12:h>12?h-12:h)+':'+(m<10?'0'+m:m)+' '+(h<12?'AM':'PM'); };
     var loginHistoryHtml='<span style="color:var(--text3);font-style:italic;">None recorded</span>';
     if(isStudent&&Array.isArray(currentProfile&&currentProfile.login_history)&&currentProfile.login_history.length){
-      loginHistoryHtml='<ol style="margin:0;padding-left:1.2em;font-size:13px;line-height:1.8;">'+currentProfile.login_history.map(function(ts){ return '<li>'+fmtTs(ts)+'</li>'; }).join('')+'</ol>';
+      loginHistoryHtml='<ol style="margin:0;padding-left:1.2em;font-size:13px;line-height:1.8;">'+currentProfile.login_history.map(function(ts){ return '<li>'+ts+'</li>'; }).join('')+'</ol>';
     }
     el.innerHTML = (isStudent ? row('First name', firstName||'<span style="color:var(--text3);font-style:italic;">Not set</span>')
         + row('Last name', lastName||'<span style="color:var(--text3);font-style:italic;">Not set</span>') : '')

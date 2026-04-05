@@ -266,6 +266,8 @@ sub { font-size: 0.75em; position: relative; top: 0.3em; line-height: 0; }
   role text not null default 'student',
   class_code text,
   email text,
+  first_name text,
+  last_name text,
   created_at timestamptz default now()
 );
 create table if not exists student_results (
@@ -293,7 +295,9 @@ grant select, insert on student_results to authenticated;
 grant select on student_results to service_role;
 -- If upgrading from an older version, run these migration lines:
 -- alter table student_results add column if not exists student_answer text;
--- alter table profiles add column if not exists email text;</pre>
+-- alter table profiles add column if not exists email text;
+-- alter table profiles add column if not exists first_name text;
+-- alter table profiles add column if not exists last_name text;</pre>
           <button class="btn btn-secondary btn-sm" onclick="copySQL()" style="margin-top:6px;">Copy SQL</button>
         </div>
       </div>
@@ -907,7 +911,7 @@ async function doRegister() {
   var role = (uname==='teacher'||uname==='admin')?'teacher':'student';
   currentUser = data.user; currentUser.access_token = data.access_token;
   sbSaveSession(data);
-  var pe = await sbInsert('profiles', { id: data.user.id, username: uname, role, class_code: code, email });
+  var pe = await sbInsert('profiles', { id: data.user.id, username: uname, role, class_code: code, email, first_name: '', last_name: '' });
   btn.disabled=false; btn.textContent='Create account';
   if (pe.error) { showAuthMsg('reg-msg','Account created but profile failed: '+(pe.error.message||JSON.stringify(pe.error)),'error'); return; }
   showAuthMsg('reg-msg','Account created! Signing you in…','success');
@@ -1009,7 +1013,7 @@ function showPanel(name, el) {
   if (name==='dashboard') loadDashboard();
   if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; editingDueDateId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; }
-  if (name==='profile') renderProfile();
+  if (name==='profile') { profileEditMode=false; renderProfile(); }
 }
 
 // ══════════════════════════════════════════
@@ -1514,11 +1518,16 @@ async function loadDashboard() {
   document.getElementById('dashboard-content').innerHTML=html;
 }
 
+var profileEditMode = false;
+
 function renderProfile() {
   var el = document.getElementById('profile-content'); if (!el) return;
   var username = currentProfile ? currentProfile.username : '—';
   var role = currentProfile ? currentProfile.role : '—';
   var email = (currentUser && currentUser.email) ? currentUser.email : '—';
+  var isStudent = role === 'student';
+  var firstName = (currentProfile && currentProfile.first_name) || '';
+  var lastName = (currentProfile && currentProfile.last_name) || '';
   var lastSignIn = '—';
   if (currentUser && currentUser.last_sign_in_at) {
     var d = new Date(currentUser.last_sign_in_at);
@@ -1536,13 +1545,90 @@ function renderProfile() {
       +'<span style="font-size:14px;color:var(--text);">'+val+'</span>'
       +'</div>';
   };
-  el.innerHTML = row('Username', username)
-    + row('Role', roleBadge)
-    + row('Email', '<span style="font-family:\'DM Mono\',monospace;font-size:13px;">'+email+'</span>')
-    + row('Last sign-in', lastSignIn)
-    + '<div style="margin-top:1.25rem;">'
-    + '<button class="btn btn-secondary" onclick="doLogout()" style="width:auto;">Sign out</button>'
-    + '</div>';
+  var inputRow = function(label, id, val, placeholder, required) {
+    return '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border);">'
+      +'<span style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text2);min-width:110px;">'+label+(required?' <span style="color:var(--red);">*</span>':'')+'</span>'
+      +'<input class="form-input" id="'+id+'" value="'+val.replace(/"/g,'&quot;')+'" placeholder="'+placeholder+'" style="flex:1;font-size:13px;padding:5px 8px;">'
+      +'</div>';
+  };
+  if (profileEditMode) {
+    var studentFields = isStudent
+      ? inputRow('First name', 'prof-first', firstName, 'First name', true)
+        + inputRow('Last name', 'prof-last', lastName, 'Last name', true)
+      : '';
+    el.innerHTML = studentFields
+      + inputRow('Username', 'prof-username', username, 'Username', true)
+      + inputRow('Email', 'prof-email', email==='—'?'':email, 'email@example.com', true)
+      + '<p style="font-size:12px;color:var(--text3);margin:6px 0 0;">Changing your email will send a confirmation link to the new address.</p>'
+      + '<span id="profile-note" style="font-size:13px;color:var(--red);display:block;min-height:18px;margin-top:6px;"></span>'
+      + '<div style="display:flex;gap:8px;margin-top:1rem;">'
+      + '<button class="btn btn-primary" onclick="saveProfile()" style="width:auto;">Save</button>'
+      + '<button class="btn btn-secondary" onclick="cancelProfileEdit()" style="width:auto;">Cancel</button>'
+      + '</div>';
+  } else {
+    el.innerHTML = (isStudent ? row('First name', firstName||'<span style="color:var(--text3);font-style:italic;">Not set</span>')
+        + row('Last name', lastName||'<span style="color:var(--text3);font-style:italic;">Not set</span>') : '')
+      + row('Username', username)
+      + row('Role', roleBadge)
+      + row('Email', '<span style="font-family:\'DM Mono\',monospace;font-size:13px;">'+email+'</span>')
+      + row('Last sign-in', lastSignIn)
+      + '<span id="profile-note" style="font-size:13px;color:var(--green);display:block;min-height:18px;margin-top:0.75rem;"></span>'
+      + '<div style="display:flex;gap:8px;margin-top:0.5rem;">'
+      + '<button class="btn btn-secondary" onclick="profileEditMode=true;renderProfile();" style="width:auto;">Edit profile</button>'
+      + '<button class="btn btn-secondary" onclick="doLogout()" style="width:auto;">Sign out</button>'
+      + '</div>';
+  }
+}
+
+function cancelProfileEdit() { profileEditMode=false; renderProfile(); }
+
+function showProfileNote(msg, isError) {
+  var n=document.getElementById('profile-note');
+  if(n){ n.style.color=isError?'var(--red)':'var(--green)'; n.textContent=msg; }
+}
+
+async function saveProfile() {
+  var newUsername=(document.getElementById('prof-username').value||'').trim();
+  var newEmail=(document.getElementById('prof-email').value||'').trim();
+  var isStudent=currentProfile&&currentProfile.role==='student';
+  var newFirst=isStudent?(document.getElementById('prof-first').value||'').trim():null;
+  var newLast=isStudent?(document.getElementById('prof-last').value||'').trim():null;
+  if(!newUsername){ showProfileNote('Username is required.',true); return; }
+  if(!newEmail||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)){ showProfileNote('A valid email is required.',true); return; }
+  if(isStudent&&!newFirst){ showProfileNote('First name is required.',true); return; }
+  if(isStudent&&!newLast){ showProfileNote('Last name is required.',true); return; }
+  var profileUpdates={};
+  if(newUsername!==currentProfile.username) profileUpdates.username=newUsername;
+  if(isStudent&&newFirst!==currentProfile.first_name) profileUpdates.first_name=newFirst;
+  if(isStudent&&newLast!==currentProfile.last_name) profileUpdates.last_name=newLast;
+  var currentEmail=(currentUser&&currentUser.email)||'';
+  var emailChanged=newEmail!==currentEmail;
+  if(Object.keys(profileUpdates).length>0){
+    var r=await fetch(CFG.url+'/rest/v1/profiles?id=eq.'+currentProfile.id,{
+      method:'PATCH', headers:Object.assign({},sbHeaders(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify(profileUpdates)
+    });
+    if(!r.ok){ var e=await r.json(); showProfileNote('Update failed: '+(e.message||e.error||'unknown error'),true); return; }
+    Object.assign(currentProfile,profileUpdates);
+  }
+  if(emailChanged){
+    var r2=await fetch(CFG.url+'/auth/v1/user',{
+      method:'PUT', headers:{'Content-Type':'application/json','apikey':CFG.key,'Authorization':'Bearer '+currentUser.access_token},
+      body:JSON.stringify({email:newEmail})
+    });
+    var d2=await r2.json();
+    if(!r2.ok){ showProfileNote('Email update failed: '+(d2.message||d2.error_description||'unknown error'),true); return; }
+    // Also update email column in profiles so it stays in sync
+    await fetch(CFG.url+'/rest/v1/profiles?id=eq.'+currentProfile.id,{
+      method:'PATCH', headers:Object.assign({},sbHeaders(),{'Prefer':'return=minimal'}),
+      body:JSON.stringify({email:newEmail})
+    });
+    currentProfile.email=newEmail;
+  }
+  profileEditMode=false;
+  renderProfile();
+  var msg=emailChanged?'Profile saved. Check your new email for a confirmation link.':'Profile saved.';
+  showProfileNote(msg,false);
 }
 
 function toggleDetail(id) {

@@ -360,6 +360,15 @@ grant select on student_results to service_role;
         <div class="auth-msg" id="forgot-msg"></div>
         <div style="margin-top:12px;text-align:center;"><a href="#" onclick="switchAuthTab('login');return false;" style="font-size:12px;color:var(--text2);">Back to sign in</a></div>
       </div>
+
+      <!-- Reset Password (arrived from email link) -->
+      <div id="auth-reset" style="display:none;">
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Enter a new password for your account.</p>
+        <div class="form-group"><label class="form-label">New password</label><input class="form-input" type="password" id="reset-pass1" placeholder="At least 6 characters" autocomplete="new-password"></div>
+        <div class="form-group"><label class="form-label">Confirm password</label><input class="form-input" type="password" id="reset-pass2" placeholder="Repeat password" autocomplete="new-password"></div>
+        <button class="btn btn-primary" onclick="doResetPassword()" id="reset-btn">Set new password</button>
+        <div class="auth-msg" id="reset-msg"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -790,8 +799,21 @@ function initSupabase() { return !!(CFG.url && CFG.key); }
 // ══════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════
+var recoveryToken = null;
+
 async function boot() {
   loadCFG();
+  // Check for password recovery token in URL hash (from Supabase reset email)
+  var hashParams = {};
+  window.location.hash.substring(1).split('&').forEach(function(p){ var kv=p.split('='); if(kv[0]) hashParams[decodeURIComponent(kv[0])]=decodeURIComponent(kv[1]||''); });
+  if (hashParams.type === 'recovery' && hashParams.access_token) {
+    recoveryToken = hashParams.access_token;
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (!CFG.url || !CFG.key) { showScreen('setup'); return; }
+    showScreen('auth');
+    switchAuthTab('reset');
+    return;
+  }
   if (!CFG.url || !CFG.key) { showScreen('setup'); return; }
   var session = await sbGetSession();
   if (session && session.user) {
@@ -861,6 +883,7 @@ function switchAuthTab(tab) {
   document.getElementById('auth-login').style.display    = tab==='login'    ? '' : 'none';
   document.getElementById('auth-register').style.display = tab==='register' ? '' : 'none';
   document.getElementById('auth-forgot').style.display   = tab==='forgot'   ? '' : 'none';
+  document.getElementById('auth-reset').style.display    = tab==='reset'    ? '' : 'none';
 }
 
 function showAuthMsg(id, msg, type) {
@@ -890,10 +913,34 @@ async function doForgotPassword() {
   if (!email) { showAuthMsg('forgot-msg','Please enter your email.','error'); return; }
   var btn = document.getElementById('forgot-btn');
   btn.disabled=true; btn.textContent='Sending…';
-  var r = await fetch(CFG.url+'/auth/v1/recover', { method:'POST', headers:{'Content-Type':'application/json','apikey':CFG.key}, body:JSON.stringify({email}) });
+  var redirectTo = window.location.href.split('#')[0];
+  var r = await fetch(CFG.url+'/auth/v1/recover', { method:'POST', headers:{'Content-Type':'application/json','apikey':CFG.key}, body:JSON.stringify({email, redirectTo}) });
   btn.disabled=false; btn.textContent='Send reset link';
   if (r.ok) { showAuthMsg('forgot-msg','Reset link sent — check your inbox.','success'); }
   else { showAuthMsg('forgot-msg','Could not send reset link. Check the email address.','error'); }
+}
+
+async function doResetPassword() {
+  var p1=document.getElementById('reset-pass1').value;
+  var p2=document.getElementById('reset-pass2').value;
+  if(p1!==p2){ showAuthMsg('reset-msg','Passwords do not match.','error'); return; }
+  if(p1.length<6){ showAuthMsg('reset-msg','Password must be at least 6 characters.','error'); return; }
+  if(!recoveryToken){ showAuthMsg('reset-msg','Reset token missing — please use the link from your email.','error'); return; }
+  var btn=document.getElementById('reset-btn'); btn.disabled=true; btn.textContent='Saving…';
+  var r=await fetch(CFG.url+'/auth/v1/user',{
+    method:'PUT',
+    headers:{'Content-Type':'application/json','apikey':CFG.key,'Authorization':'Bearer '+recoveryToken},
+    body:JSON.stringify({password:p1})
+  });
+  btn.disabled=false; btn.textContent='Set new password';
+  if(r.ok){
+    recoveryToken=null;
+    showAuthMsg('reset-msg','Password updated! You can now sign in.','success');
+    setTimeout(function(){ switchAuthTab('login'); },2000);
+  } else {
+    var e=await r.json();
+    showAuthMsg('reset-msg','Failed: '+(e.message||e.error_description||'unknown error'),'error');
+  }
 }
 
 async function doRegister() {

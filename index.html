@@ -1718,27 +1718,26 @@ function saveServiceKey() {
 }
 async function loadCoTeacherPanel() {
   var el=document.getElementById('coteacher-panel-body'); if(!el) return;
-  if(!CFG.serviceKey){
-    el.innerHTML='<p style="font-size:13px;color:var(--amber);">&#9888; A Service Role Key is required to manage co-teacher access. Add it above in <strong>Admin access</strong>, then re-open Settings.</p>';
-    return;
-  }
   if(!CFG.classCode){ el.innerHTML='<p style="font-size:13px;color:var(--text3);">No class code configured.</p>'; return; }
   el.innerHTML='<span style="font-size:13px;color:var(--text3);">Loading users…</span>';
-  var r=await sbSelect('profiles','class_code=eq.'+encodeURIComponent(CFG.classCode)+'&order=username.asc',sbHeadersAdmin());
-  if(!r.data){ el.innerHTML='<p style="font-size:13px;color:var(--red);">Could not load users. Check your Service Role Key.</p>'; return; }
+  // Use regular auth headers for reading — the RLS policy allows all authenticated users to read profiles
+  var r=await sbSelect('profiles','class_code=eq.'+encodeURIComponent(CFG.classCode)+'&order=username.asc');
+  if(!r.data){ el.innerHTML='<p style="font-size:13px;color:var(--red);">Could not load users: '+JSON.stringify(r.error)+'</p>'; return; }
   var others=r.data.filter(function(p){ return currentProfile && p.id!==currentProfile.id; });
   var coTeachers=others.filter(function(p){ return p.role==='teacher'; });
   var rest=others.filter(function(p){ return p.role!=='teacher'; });
+  var noKey=!CFG.serviceKey;
   function userRowHtml(p, grant) {
     var displayName=(p.first_name||p.last_name)?(p.first_name||'')+' '+(p.last_name||''):'';
     return '<div class="bank-item" style="margin-bottom:6px;"><div class="bank-item-body">'
       +'<div style="font-weight:600;font-size:14px;">'+p.username+'</div>'
       +(displayName?'<div style="font-size:12px;color:var(--text2);">'+displayName.trim()+'</div>':'')
       +'</div><div class="bank-actions">'
-      +'<button class="btn '+(grant?'btn-primary':'btn-danger')+' btn-sm" data-uid="'+p.id+'" data-uname="'+p.username.replace(/"/g,'&quot;')+'" onclick="setTeacherRoleFromEl(this,'+grant+')">'+(grant?'Grant teacher access':'Revoke')+'</button>'
+      +'<button class="btn '+(grant?'btn-primary':'btn-danger')+' btn-sm"'+(noKey?' disabled title="Requires Service Role Key (Admin access)"':'')+' data-uid="'+p.id+'" data-uname="'+p.username.replace(/"/g,'&quot;')+'" onclick="setTeacherRoleFromEl(this,'+grant+')">'+(grant?'Grant teacher access':'Revoke')+'</button>'
       +'</div></div>';
   }
   var html='';
+  if(noKey) html+='<p style="font-size:12px;color:var(--amber);margin-bottom:10px;">&#9888; Add your Service Role Key under <strong>Admin access</strong> above to enable granting/revoking roles.</p>';
   if(coTeachers.length){
     html+='<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:8px;">Current co-teachers</div>';
     coTeachers.forEach(function(p){ html+=userRowHtml(p,false); });
@@ -1748,11 +1747,12 @@ async function loadCoTeacherPanel() {
     html+='<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);margin-bottom:8px;">Students &amp; others</div>';
     rest.forEach(function(p){ html+=userRowHtml(p,true); });
   }
-  if(!coTeachers.length && !rest.length) html='<div class="empty">No other users in this class yet.</div>';
+  if(!coTeachers.length && !rest.length) html+='<div class="empty">No other users in this class yet.</div>';
   el.innerHTML=html;
 }
 
 function setTeacherRoleFromEl(btn, grant) {
+  if(!CFG.serviceKey){ alert('A Service Role Key is required to change roles. Add it under Settings → Admin access.'); return; }
   var uid=btn.dataset.uid, uname=btn.dataset.uname;
   var msg=grant
     ?'Grant teacher access to '+uname+'? They will be able to edit questions, manage assignments, and view all student results.'

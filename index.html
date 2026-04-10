@@ -1923,7 +1923,7 @@ function renderAssignmentList(el) {
           :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
            +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
            +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
-           +(a.category==='ICE'?'<button class="btn btn-secondary btn-sm" onclick="startMoveUnit('+a.id+')">Move unit</button>':'')
+           +(a.category==='ICE'?'<button class="btn btn-secondary btn-sm" onclick="startMoveUnit('+a.id+')">Move to Unit</button>':'')
            +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
            +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
       }

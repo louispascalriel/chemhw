@@ -1837,7 +1837,7 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 //  ASSIGNMENTS
 // ══════════════════════════════════════════
-var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, newAsgnCategory='HW', newAsgnSection='', collapsedFolders={};
+var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, movingUnitId=null, newAsgnCategory='HW', newAsgnSection='', collapsedFolders={};
 
 function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
 
@@ -1887,6 +1887,7 @@ function renderAssignmentList(el) {
       var visColor=a.visible?'var(--green)':'var(--text3)';
       var isRenaming=renamingAssignmentId===a.id;
       var isEditingDue=editingDueDateId===a.id;
+      var isMoveUnit=movingUnitId===a.id;
       var dueParts=a.dueISO?a.dueISO.split('T'):['','23:59'];
       var dueStr=isEditingDue
         ?'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:2px;">'
@@ -1899,17 +1900,33 @@ function renderAssignmentList(el) {
       var nameHtml=isRenaming
         ?'<div style="display:flex;align-items:center;gap:6px;"><input class="form-input" id="rename-input-'+a.id+'" value="'+a.name.replace(/"/g,'&quot;')+'" style="font-size:14px;font-weight:600;padding:4px 8px;width:200px;" onkeydown="if(event.key===\'Enter\')saveRename('+a.id+');if(event.key===\'Escape\')cancelRename();"></div>'
         :'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>';
-      var actionsHtml=isRenaming
-        ?'<button class="btn btn-primary btn-sm" onclick="saveRename('+a.id+')">Save</button>'
-         +'<button class="btn btn-secondary btn-sm" onclick="cancelRename()">Cancel</button>'
-        :isEditingDue
-        ?'<button class="btn btn-primary btn-sm" onclick="saveEditDue('+a.id+')">Save</button>'
-         +'<button class="btn btn-secondary btn-sm" onclick="cancelEditDue()">Cancel</button>'
-        :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
-         +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
-         +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
-         +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
-         +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
+      var actionsHtml;
+      if(isMoveUnit){
+        var moveOptHtml='<option value="">&#8212; None (no unit) &#8212;</option>';
+        existingUnits.forEach(function(u){ moveOptHtml+='<option value="'+u.replace(/"/g,'&quot;')+'">'+u+'</option>'; });
+        moveOptHtml+='<option value="__new__">Enter new unit&#8230;</option>';
+        actionsHtml='<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;">'
+          +'<span style="font-size:12px;color:var(--text2);white-space:nowrap;">Target unit:</span>'
+          +'<select class="form-input" id="move-unit-sel-'+a.id+'" onchange="onMoveUnitSelectChange('+a.id+')" style="font-size:12px;padding:3px 7px;">'+moveOptHtml+'</select>'
+          +'<input class="form-input" id="move-unit-inp-'+a.id+'" placeholder="New unit name" style="font-size:12px;padding:3px 7px;display:none;">'
+          +'<button class="btn btn-primary btn-sm" onclick="executeMoveUnit('+a.id+',\'move\')">Move here</button>'
+          +'<button class="btn btn-secondary btn-sm" onclick="executeMoveUnit('+a.id+',\'copy\')">Copy here</button>'
+          +'<button class="btn btn-secondary btn-sm" onclick="cancelMoveUnit()">Cancel</button>'
+          +'</div>';
+      } else {
+        actionsHtml=isRenaming
+          ?'<button class="btn btn-primary btn-sm" onclick="saveRename('+a.id+')">Save</button>'
+           +'<button class="btn btn-secondary btn-sm" onclick="cancelRename()">Cancel</button>'
+          :isEditingDue
+          ?'<button class="btn btn-primary btn-sm" onclick="saveEditDue('+a.id+')">Save</button>'
+           +'<button class="btn btn-secondary btn-sm" onclick="cancelEditDue()">Cancel</button>'
+          :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
+           +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
+           +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
+           +(a.category==='ICE'?'<button class="btn btn-secondary btn-sm" onclick="startMoveUnit('+a.id+')">Move unit</button>':'')
+           +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
+           +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
+      }
       return '<div class="bank-item"><div class="bank-item-body">'
         +nameHtml
         +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
@@ -2079,6 +2096,35 @@ function onNewAsgnUnitChange() {
   if(sel&&inp) inp.style.display=sel.value==='__new__'?'':'none';
 }
 
+function startMoveUnit(id) { renamingAssignmentId=null; editingDueDateId=null; movingUnitId=id; renderAssignments(); }
+function cancelMoveUnit() { movingUnitId=null; renderAssignments(); }
+
+function onMoveUnitSelectChange(id) {
+  var sel=document.getElementById('move-unit-sel-'+id);
+  var inp=document.getElementById('move-unit-inp-'+id);
+  if(sel&&inp) inp.style.display=sel.value==='__new__'?'':'none';
+}
+
+function executeMoveUnit(id, action) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  var sel=document.getElementById('move-unit-sel-'+id); if(!sel) return;
+  var targetUnit=sel.value==='__new__'?((document.getElementById('move-unit-inp-'+id)||{}).value||'').trim():sel.value;
+  if(action==='move'){
+    a.courseSection=targetUnit;
+    movingUnitId=null;
+    saveAssignments(); renderAssignments();
+  } else if(action==='copy'){
+    var baseName=a.name, newName=baseName, suffix=2;
+    while(assignments.some(function(x){ return x.name===newName; })){ newName=baseName+' ('+suffix+')'; suffix++; }
+    var newA={id:nextAssignmentId++, name:newName, category:'ICE', courseSection:targetUnit, visible:a.visible, dueDate:a.dueDate, dueISO:a.dueISO};
+    assignments.push(newA);
+    var srcQs=questions.filter(function(q){ return (q.assignment||'General')===a.name; });
+    srcQs.forEach(function(q){ var copy=JSON.parse(JSON.stringify(q)); copy.id=nextId++; copy.assignment=newName; questions.push(copy); });
+    movingUnitId=null;
+    saveAssignments(); saveQuestions(); renderAssignments(); renderBank(); renderStudentQuestions();
+  }
+}
+
 function showAsgnNote(msg) {
   var n=document.getElementById('asgn-note');
   if(n){ n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
@@ -2130,7 +2176,7 @@ function deleteAssignment(id) {
 function openAssignmentEditor(id) { editingAssignmentId=id; renderAssignments(); }
 function closeAssignmentEditor() { editingAssignmentId=null; renderAssignments(); }
 
-function startRename(id) { editingDueDateId=null; renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }
+function startRename(id) { editingDueDateId=null; movingUnitId=null; renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }
 function cancelRename() { renamingAssignmentId=null; renderAssignments(); }
 function saveRename(id) {
   var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
@@ -2146,7 +2192,7 @@ function saveRename(id) {
   renderAssignments(); renderBank(); renderStudentQuestions();
 }
 
-function startEditDue(id) { renamingAssignmentId=null; editingDueDateId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('due-date-input-'+id); if(el) el.focus(); },0); }
+function startEditDue(id) { renamingAssignmentId=null; movingUnitId=null; editingDueDateId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('due-date-input-'+id); if(el) el.focus(); },0); }
 function cancelEditDue() { editingDueDateId=null; renderAssignments(); }
 function saveEditDue(id) {
   var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;

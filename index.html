@@ -1730,12 +1730,14 @@ async function loadCoTeacherPanel() {
   var noKey=!CFG.serviceKey;
   function userRowHtml(p, grant) {
     var displayName=(p.first_name||p.last_name)?(p.first_name||'')+' '+(p.last_name||''):'';
+    var isPrimary=p.username==='teacher'||p.username==='admin';
+    var actionHtml=(!grant&&isPrimary)
+      ?'<span style="font-size:12px;color:var(--text3);">&#128274; Primary teacher</span>'
+      :'<button class="btn '+(grant?'btn-primary':'btn-danger')+' btn-sm"'+(noKey?' disabled title="Requires Service Role Key (Admin access)"':'')+' data-uid="'+p.id+'" data-uname="'+p.username.replace(/"/g,'&quot;')+'" onclick="setTeacherRoleFromEl(this,'+grant+')">'+(grant?'Grant teacher access':'Revoke')+'</button>';
     return '<div class="bank-item" style="margin-bottom:6px;"><div class="bank-item-body">'
       +'<div style="font-weight:600;font-size:14px;">'+p.username+'</div>'
       +(displayName?'<div style="font-size:12px;color:var(--text2);">'+displayName.trim()+'</div>':'')
-      +'</div><div class="bank-actions">'
-      +'<button class="btn '+(grant?'btn-primary':'btn-danger')+' btn-sm"'+(noKey?' disabled title="Requires Service Role Key (Admin access)"':'')+' data-uid="'+p.id+'" data-uname="'+p.username.replace(/"/g,'&quot;')+'" onclick="setTeacherRoleFromEl(this,'+grant+')">'+(grant?'Grant teacher access':'Revoke')+'</button>'
-      +'</div></div>';
+      +'</div><div class="bank-actions">'+actionHtml+'</div></div>';
   }
   var html='';
   if(noKey) html+='<p style="font-size:12px;color:var(--amber);margin-bottom:10px;">&#9888; Add your Service Role Key under <strong>Admin access</strong> above to enable granting/revoking roles.</p>';

@@ -580,6 +580,7 @@ grant select on student_results to service_role;
             <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">If students see a "Could not save" error, your Supabase tables are missing role grants. Run this in your <em>Supabase SQL Editor</em>:</p>
             <pre id="fix-sql" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'DM Mono',monospace;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--text);margin-bottom:8px;">grant usage on schema public to anon, authenticated, service_role;
 grant select, update on profiles to authenticated;
+grant select, update on profiles to service_role;
 grant select on profiles to anon;
 grant select, insert on student_results to authenticated;
 grant select on student_results to service_role;</pre>

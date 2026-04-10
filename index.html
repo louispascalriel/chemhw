@@ -1847,6 +1847,10 @@ function renderAssignments() {
 }
 
 function renderAssignmentList(el) {
+  var existingUnits=[...new Set(assignments.filter(function(a){ return a.category==='ICE'&&a.courseSection; }).map(function(a){ return a.courseSection; }))].sort();
+  var unitOptHtml='<option value="">&#8212; None &#8212;</option>';
+  existingUnits.forEach(function(u){ unitOptHtml+='<option value="'+u.replace(/"/g,'&quot;')+'">'+u+'</option>'; });
+  unitOptHtml+='<option value="__new__">Enter new unit&#8230;</option>';
   var html='<div class="card"><div class="card-header"><div class="card-title">Create assignment</div></div>'
     +'<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
     +'<div class="form-group" style="margin:0;flex:1;min-width:180px;"><label class="form-label">Name</label><input class="form-input" id="new-asgn-name" placeholder="e.g. Unit 1 Homework"></div>'
@@ -1854,7 +1858,7 @@ function renderAssignmentList(el) {
     +'<div class="type-tab'+(newAsgnCategory==='HW'?' active':'')+'" id="new-asgn-hw" onclick="setNewAsgnCat(\'HW\')">HW — Homework</div>'
     +'<div class="type-tab'+(newAsgnCategory==='ICE'?' active':'')+'" id="new-asgn-ice" onclick="setNewAsgnCat(\'ICE\')">ICE — In-Class</div>'
     +'</div></div>'
-    +'<div class="form-group" id="new-asgn-section-group" style="margin:0;flex:1;min-width:180px;'+(newAsgnCategory!=='ICE'?'display:none;':'')+'"><label class="form-label">Course section <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><input class="form-input" id="new-asgn-section" placeholder="e.g. Section A"></div>'
+    +'<div class="form-group" id="new-asgn-section-group" style="margin:0;flex:1;min-width:180px;'+(newAsgnCategory!=='ICE'?'display:none;':'')+'"><label class="form-label">Unit <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><select class="form-input" id="new-asgn-unit-select" onchange="onNewAsgnUnitChange()">'+unitOptHtml+'</select><input class="form-input" id="new-asgn-unit-input" placeholder="New unit name" style="margin-top:6px;display:none;"></div>'
     +'<div class="form-group" style="margin:0;"><label class="form-label">Due date <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label>'
     +'<div style="display:flex;gap:6px;align-items:center;"><input class="form-input" id="new-asgn-due" type="date" style="flex:1;">'
     +'<input class="form-input" id="new-asgn-time" type="time" value="23:59" style="width:100px;">'
@@ -2069,6 +2073,12 @@ function toggleFolder(key) {
   renderAssignments();
 }
 
+function onNewAsgnUnitChange() {
+  var sel=document.getElementById('new-asgn-unit-select');
+  var inp=document.getElementById('new-asgn-unit-input');
+  if(sel&&inp) inp.style.display=sel.value==='__new__'?'':'none';
+}
+
 function showAsgnNote(msg) {
   var n=document.getElementById('asgn-note');
   if(n){ n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
@@ -2087,13 +2097,15 @@ function createAssignment() {
   var time=document.getElementById('new-asgn-time').value||'23:59';
   var dueDateTime=due?(due+' at '+formatTime12(time)+' EST'):'';
   var dueISO=due?(due+'T'+time):'';
-  var courseSection=newAsgnCategory==='ICE'?((document.getElementById('new-asgn-section')||{}).value||'').trim():'';
+  var courseSection='';
+  if(newAsgnCategory==='ICE'){ var _sel=document.getElementById('new-asgn-unit-select'); if(_sel){ courseSection=_sel.value==='__new__'?((document.getElementById('new-asgn-unit-input')||{}).value||'').trim():_sel.value; } }
   assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, courseSection:courseSection, visible:false, dueDate:dueDateTime, dueISO:dueISO});
   saveAssignments();
   document.getElementById('new-asgn-name').value='';
   document.getElementById('new-asgn-due').value='';
   document.getElementById('new-asgn-time').value='23:59';
-  var secEl=document.getElementById('new-asgn-section'); if(secEl) secEl.value='';
+  var _selEl=document.getElementById('new-asgn-unit-select'); if(_selEl) _selEl.value='';
+  var _inpEl=document.getElementById('new-asgn-unit-input'); if(_inpEl){ _inpEl.value=''; _inpEl.style.display='none'; }
   showAsgnNote('Assignment created!');
   renderAssignments();
 }

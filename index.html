@@ -1837,7 +1837,7 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 //  ASSIGNMENTS
 // ══════════════════════════════════════════
-var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, newAsgnCategory='HW';
+var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, newAsgnCategory='HW', newAsgnSection='', collapsedFolders={};
 
 function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
 
@@ -1847,7 +1847,6 @@ function renderAssignments() {
 }
 
 function renderAssignmentList(el) {
-  var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
   var html='<div class="card"><div class="card-header"><div class="card-title">Create assignment</div></div>'
     +'<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
     +'<div class="form-group" style="margin:0;flex:1;min-width:180px;"><label class="form-label">Name</label><input class="form-input" id="new-asgn-name" placeholder="e.g. Unit 1 Homework"></div>'
@@ -1855,6 +1854,7 @@ function renderAssignmentList(el) {
     +'<div class="type-tab'+(newAsgnCategory==='HW'?' active':'')+'" id="new-asgn-hw" onclick="setNewAsgnCat(\'HW\')">HW — Homework</div>'
     +'<div class="type-tab'+(newAsgnCategory==='ICE'?' active':'')+'" id="new-asgn-ice" onclick="setNewAsgnCat(\'ICE\')">ICE — In-Class</div>'
     +'</div></div>'
+    +'<div class="form-group" id="new-asgn-section-group" style="margin:0;flex:1;min-width:180px;'+(newAsgnCategory!=='ICE'?'display:none;':'')+'"><label class="form-label">Course section <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><input class="form-input" id="new-asgn-section" placeholder="e.g. Section A"></div>'
     +'<div class="form-group" style="margin:0;"><label class="form-label">Due date <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label>'
     +'<div style="display:flex;gap:6px;align-items:center;"><input class="form-input" id="new-asgn-due" type="date" style="flex:1;">'
     +'<input class="form-input" id="new-asgn-time" type="time" value="23:59" style="width:100px;">'
@@ -1873,10 +1873,12 @@ function renderAssignmentList(el) {
   var totalCount=assignments.length+implicitNames.length;
 
   html+='<div class="card" style="margin-top:1rem;"><div class="card-header"><div class="card-title">Assignments</div><span style="font-size:13px;color:var(--text3);">'+totalCount+' assignment'+(totalCount!==1?'s':'')+'</span></div>';
+
   if(!assignments.length && !implicitNames.length){
     html+='<div class="empty">No assignments yet — create one above.</div>';
   } else {
-    assignments.forEach(function(a){
+    // Helper: render a single assignment row
+    function asgnItemHtml(a) {
       var qCount=questions.filter(function(q){ return (q.assignment||'General')===a.name; }).length;
       var visColor=a.visible?'var(--green)':'var(--text3)';
       var isRenaming=renamingAssignmentId===a.id;
@@ -1904,20 +1906,73 @@ function renderAssignmentList(el) {
          +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
          +'<button class="btn btn-secondary btn-sm" onclick="openAssignmentEditor('+a.id+')">Manage questions</button>'
          +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
-      html+='<div class="bank-item"><div class="bank-item-body">'
+      return '<div class="bank-item"><div class="bank-item-body">'
         +nameHtml
         +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
-        +'<span class="badge badge-'+a.category.toLowerCase()+'">'+a.category+'</span>'
         +'<span style="font-size:12px;color:var(--text2);">'+qCount+' question'+(qCount!==1?'s':'')+'</span>'
         +dueStr
         +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+(a.visible?'Visible to students':'Hidden from students')+'</span>'
         +'</div></div>'
-        +'<div class="bank-actions">'
-        +actionsHtml
-        +'</div></div>';
-    });
+        +'<div class="bank-actions">'+actionsHtml+'</div></div>';
+    }
+
+    // HW folder
+    var hwList=assignments.filter(function(a){ return a.category==='HW'; });
+    var hwCollapsed=!!collapsedFolders['HW'];
+    html+='<div style="margin-bottom:12px;">'
+      +'<div data-folder-key="HW" onclick="toggleFolder(this.dataset.folderKey)" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:2px solid var(--border);margin-bottom:8px;user-select:none;">'
+      +'<span style="font-size:12px;color:var(--text2);display:inline-block;transform:rotate('+(hwCollapsed?'-90deg':'0deg')+');transition:transform 0.15s;">&#9660;</span>'
+      +'<span style="font-size:14px;font-weight:600;color:var(--text1);">&#128193; HW &#8212; Homework</span>'
+      +'<span style="font-size:12px;color:var(--text3);">'+hwList.length+' assignment'+(hwList.length!==1?'s':'')+'</span>'
+      +'</div>';
+    if(!hwCollapsed){
+      if(!hwList.length) html+='<div style="padding:4px 20px 8px;font-size:13px;color:var(--text3);">No HW assignments yet.</div>';
+      else hwList.forEach(function(a){ html+=asgnItemHtml(a); });
+    }
+    html+='</div>';
+
+    // ICE folder
+    var iceList=assignments.filter(function(a){ return a.category==='ICE'; });
+    var iceCollapsed=!!collapsedFolders['ICE'];
+    html+='<div style="margin-bottom:12px;">'
+      +'<div data-folder-key="ICE" onclick="toggleFolder(this.dataset.folderKey)" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:2px solid var(--border);margin-bottom:8px;user-select:none;">'
+      +'<span style="font-size:12px;color:var(--text2);display:inline-block;transform:rotate('+(iceCollapsed?'-90deg':'0deg')+');transition:transform 0.15s;">&#9660;</span>'
+      +'<span style="font-size:14px;font-weight:600;color:var(--text1);">&#128193; ICE &#8212; In-Class</span>'
+      +'<span style="font-size:12px;color:var(--text3);">'+iceList.length+' assignment'+(iceList.length!==1?'s':'')+'</span>'
+      +'</div>';
+    if(!iceCollapsed){
+      if(!iceList.length){
+        html+='<div style="padding:4px 20px 8px;font-size:13px;color:var(--text3);">No ICE assignments yet.</div>';
+      } else {
+        // Group ICE assignments by courseSection
+        var iceSections={};
+        iceList.forEach(function(a){ var s=a.courseSection||''; if(!iceSections[s]) iceSections[s]=[]; iceSections[s].push(a); });
+        var sectionKeys=Object.keys(iceSections).sort(function(a,b){ if(!a&&b) return 1; if(a&&!b) return -1; return a.localeCompare(b); });
+        sectionKeys.forEach(function(sec){
+          var secList=iceSections[sec];
+          if(sec){
+            var subKey='ICE_SEC_'+sec;
+            var subCollapsed=!!collapsedFolders[subKey];
+            html+='<div style="margin:0 0 8px 20px;">'
+              +'<div data-folder-key="'+subKey.replace(/"/g,'&quot;')+'" onclick="toggleFolder(this.dataset.folderKey)" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px dashed var(--border);margin-bottom:6px;user-select:none;">'
+              +'<span style="font-size:11px;color:var(--text2);display:inline-block;transform:rotate('+(subCollapsed?'-90deg':'0deg')+');transition:transform 0.15s;">&#9660;</span>'
+              +'<span style="font-size:13px;font-weight:600;color:var(--text2);">&#128194; '+sec+'</span>'
+              +'<span style="font-size:12px;color:var(--text3);">'+secList.length+' assignment'+(secList.length!==1?'s':'')+'</span>'
+              +'</div>';
+            if(!subCollapsed) secList.forEach(function(a){ html+=asgnItemHtml(a); });
+            html+='</div>';
+          } else {
+            // ICE assignments with no section — render directly under ICE folder
+            secList.forEach(function(a){ html+=asgnItemHtml(a); });
+          }
+        });
+      }
+    }
+    html+='</div>';
+
+    // Not yet in organizer
     if(implicitNames.length){
-      if(assignments.length) html+='<div style="border-top:1px solid var(--border);margin:0.5rem 0;"></div>';
+      html+='<div style="border-top:1px solid var(--border);margin:0.5rem 0;"></div>';
       html+='<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);padding:4px 0 8px;">Not yet in organizer</div>';
       implicitNames.forEach(function(name){
         var info=implicitMap[name];
@@ -2005,6 +2060,13 @@ function setNewAsgnCat(c) {
   var hw=document.getElementById('new-asgn-hw'), ice=document.getElementById('new-asgn-ice');
   if(hw) hw.className='type-tab'+(c==='HW'?' active':'');
   if(ice) ice.className='type-tab'+(c==='ICE'?' active':'');
+  var sg=document.getElementById('new-asgn-section-group');
+  if(sg) sg.style.display=c==='ICE'?'':'none';
+}
+
+function toggleFolder(key) {
+  collapsedFolders[key]=!collapsedFolders[key];
+  renderAssignments();
 }
 
 function showAsgnNote(msg) {
@@ -2025,11 +2087,13 @@ function createAssignment() {
   var time=document.getElementById('new-asgn-time').value||'23:59';
   var dueDateTime=due?(due+' at '+formatTime12(time)+' EST'):'';
   var dueISO=due?(due+'T'+time):'';
-  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, visible:false, dueDate:dueDateTime, dueISO:dueISO});
+  var courseSection=newAsgnCategory==='ICE'?((document.getElementById('new-asgn-section')||{}).value||'').trim():'';
+  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, courseSection:courseSection, visible:false, dueDate:dueDateTime, dueISO:dueISO});
   saveAssignments();
   document.getElementById('new-asgn-name').value='';
   document.getElementById('new-asgn-due').value='';
   document.getElementById('new-asgn-time').value='23:59';
+  var secEl=document.getElementById('new-asgn-section'); if(secEl) secEl.value='';
   showAsgnNote('Assignment created!');
   renderAssignments();
 }

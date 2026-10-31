@@ -126,6 +126,9 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 /* ── STUDENT Q CARDS ── */
 .q-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
 .q-card.locked { opacity: 0.65; }
+.q-card.locked.solved-card { opacity: 1; border-color: #b3dcc4; box-shadow: inset 4px 0 0 var(--green), var(--shadow); }
+.q-card.solved-card .mc-option:not(.correct-opt) { opacity: 0.55; }
+.result-msg { scroll-margin-bottom: calc(80px + env(safe-area-inset-bottom)); }
 .q-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; flex-wrap: wrap; gap: 6px; }
 .q-num { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); }
 .q-text { font-size: 15px; color: var(--text); margin: 8px 0 1rem; line-height: 1.65; }
@@ -153,7 +156,7 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .sci-sep { font-size: 15px; color: var(--text2); }
 .mc-options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 1rem; }
 .mc-option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border: 1px solid var(--border2); border-radius: var(--radius); cursor: pointer; transition: all 0.15s; }
-.mc-option:hover { border-color: var(--accent); background: var(--accent-light); }
+@media (hover: hover) { .mc-option:hover { border-color: var(--accent); background: var(--accent-light); } }
 .mc-option.selected { border-color: var(--accent); background: var(--accent-light); }
 .mc-option.correct-opt { border-color: var(--green); background: var(--green-light); }
 .mc-option.wrong-opt { border-color: var(--red); background: var(--red-light); }
@@ -1486,7 +1489,35 @@ function renderStudentQuestions() {
       updateAttemptUI(q.id);
     }
     container.appendChild(div);
+    if (!readOnly) restoreAnsweredState(q);
   });
+}
+
+// When a student returns to a question they already finished (reload, other device, back to the
+// assignment), show it as finished instead of as a fresh — but silently unclickable — question.
+function restoreAnsweredState(q) {
+  var qid=q.id, el=document.getElementById('res-'+qid);
+  if (!el) return;
+  if (solved[qid]) {
+    el.className='result-msg correct'; el.innerHTML='✓ Correct — you already solved this one.';
+    if (q.type==='mc') markMCSolved(q);
+    lockQ(qid, true);
+  } else if (!UNLIMITED && (usedAttempts[qid]||0)>=MAX) {
+    el.className='result-msg exhausted'; el.innerHTML='No attempts remaining. The correct answer was: <strong>'+correctDisplayFor(q)+'</strong>';
+    lockQ(qid);
+  }
+}
+function correctDisplayFor(q) {
+  var letters=['A','B','C','D','E','F'];
+  if (q.type==='formula') return parseChem((q.answers||[])[0]||'');
+  if (q.type==='sci') return Number(q.correctVal).toExponential(3);
+  if (q.type==='mc') return 'option '+letters[q.correct]+' — '+(q.options||[])[q.correct];
+  if (q.type==='calc') return q.correctVal+(q.unit?' '+q.unit:'');
+  return '';
+}
+function markMCSolved(q) {
+  (q.options||[]).forEach(function(_,i){ var e=document.getElementById('mcopt-'+q.id+'-'+i); if(e){ e.classList.add('disabled'); if(i===q.correct) e.classList.add('correct-opt'); } });
+  var expEl=document.getElementById('mc-exp-'+q.id); if(expEl) expEl.style.display='block';
 }
 
 function selectMC(qid,oi) {
@@ -1529,8 +1560,7 @@ function checkMC(qid) {
   var selectedAnswer=letters[q._sel]+': '+q.options[q._sel];
   handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct],selectedAnswer);
   if (ok) {
-    (q.options||[]).forEach(function(_,i){ var e=document.getElementById('mcopt-'+qid+'-'+i); if(e){ e.classList.add('disabled'); if(i===q.correct) e.classList.add('correct-opt'); } });
-    var expEl=document.getElementById('mc-exp-'+qid); if(expEl) expEl.style.display='block';
+    markMCSolved(q);
   } else {
     var w=document.getElementById('mcopt-'+qid+'-'+q._sel); if(w) w.classList.add('wrong-opt');
   }
@@ -1552,8 +1582,8 @@ function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
   saveResult(qid, ok, usedAttempts[qid], studentAnswer);
   if (ok) {
     solved[qid]=true;
-    el.className='result-msg correct'; el.innerHTML=successMsg||'Correct!';
-    lockQ(qid);
+    el.className='result-msg correct'; el.innerHTML='✓ '+(successMsg||'Correct!');
+    lockQ(qid, true);
   } else {
     var rem=UNLIMITED?Infinity:MAX-(usedAttempts[qid]||0);
     if (!UNLIMITED&&rem<=0) {
@@ -1565,14 +1595,17 @@ function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
     }
   }
   updateAttemptUI(qid); updateScore();
+  // Make sure the feedback is on screen (it sits below the options; on phones the tab bar can cover it).
+  if (el && el.scrollIntoView) { try { el.scrollIntoView({ block:'nearest', behavior:'smooth' }); } catch(e){ el.scrollIntoView(false); } }
 }
 
-function lockQ(qid) {
+function lockQ(qid, isSolved) {
   var card=document.getElementById('qcard-'+qid);
   if (!card) return;
   card.querySelectorAll('input:not([type=range])').forEach(function(e){ e.disabled=true; });
   card.querySelectorAll('button.btn-primary').forEach(function(e){ e.disabled=true; });
   card.classList.add('locked');
+  if (isSolved) card.classList.add('solved-card');
 }
 
 function updateAttemptUI(qid) {

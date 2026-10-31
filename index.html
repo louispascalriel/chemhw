@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChemHW</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
 
@@ -239,7 +239,44 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .loading { text-align: center; padding: 2rem; color: var(--text3); font-size: 14px; }
 sup { font-size: 0.75em; position: relative; top: -0.5em; line-height: 0; }
 sub { font-size: 0.75em; position: relative; top: 0.3em; line-height: 0; }
-@media (max-width: 640px) { .sidebar { display: none; } .content { padding: 1rem; } .topbar { padding: 0.75rem 1rem; } }
+/* ── MOBILE TAB BAR (replaces the sidebar on phones) ── */
+.mobile-tabbar { display: none; }
+.sci-coeff { width: 140px; }
+.sci-exp { width: 80px; }
+
+@media (max-width: 640px) {
+  .sidebar { display: none; }
+  .content { padding: 1rem; }
+  .topbar { padding: 0.75rem 1rem; }
+
+  /* 1) Bottom tab bar */
+  .mobile-tabbar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -1px 6px rgba(0,0,0,0.05); }
+  .tab-group { display: flex; }
+  .tab-item { flex: 1; min-width: 0; min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; padding: 7px 2px; font-size: 11px; line-height: 1.2; color: var(--text3); cursor: pointer; text-align: center; -webkit-tap-highlight-color: transparent; user-select: none; }
+  .tab-item svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .tab-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .tab-item.active { color: var(--accent); font-weight: 600; }
+  .main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  #sync-status { bottom: calc(72px + env(safe-area-inset-bottom)) !important; right: 12px !important; left: 12px !important; max-width: none !important; }
+
+  /* 2) iOS Safari zooms into any text box under 16px — keep inputs at 16px on phones */
+  input, select, textarea, .form-input, .form-select, .student-input, .sci-input { font-size: 16px !important; }
+
+  /* 3) Sci-notation answer boxes share the row instead of clipping */
+  .sci-group { flex-wrap: nowrap; }
+  .sci-coeff { flex: 1 1 auto; width: auto; min-width: 0; }
+  .sci-exp { flex: 0 0 auto; width: 4.5em; }
+  .sci-sep { white-space: nowrap; }
+
+  /* 4) Score tiles in one compact row */
+  .score-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 1rem; }
+  .score-card { padding: 9px 4px; border-radius: var(--radius); }
+  .score-val { font-size: 20px; }
+  .score-lbl { font-size: 9px; letter-spacing: 0.03em; }
+
+  .assignment-card { padding: 14px 16px; }
+}
+@media (max-width: 380px) { #user-display-name { display: none; } }
 </style>
 </head>
 <body>
@@ -428,6 +465,38 @@ grant select on student_results to service_role;
       </div>
       <div class="sidebar-footer"><p id="sidebar-role-note"></p></div>
     </aside>
+
+    <!-- Phone navigation (shown ≤640px instead of the sidebar). Each tab triggers the matching sidebar item. -->
+    <nav class="mobile-tabbar" aria-label="Main navigation">
+      <div class="tab-group" id="mobile-student-tabs">
+        <div class="tab-item" data-target="nav-hw" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg><span>Homework</span>
+        </div>
+        <div class="tab-item" data-target="nav-ice" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M3 5l5-3 5 3M3 11l5 3 5-3"/></svg><span>In-Class</span>
+        </div>
+        <div class="tab-item" data-target="nav-profile-student" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>Profile</span>
+        </div>
+      </div>
+      <div class="tab-group" id="mobile-teacher-tabs" style="display:none;">
+        <div class="tab-item" data-target="nav-dashboard" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="8" width="4" height="7" rx="1"/><rect x="6" y="5" width="4" height="10" rx="1"/><rect x="11" y="2" width="4" height="13" rx="1"/></svg><span>Results</span>
+        </div>
+        <div class="tab-item" data-target="nav-builder" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M2 8h12"/></svg><span>Builder</span>
+        </div>
+        <div class="tab-item" data-target="nav-assignments" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="3" rx="1"/><rect x="2" y="7" width="12" height="3" rx="1"/><rect x="2" y="12" width="7" height="2" rx="1"/></svg><span>Assignments</span>
+        </div>
+        <div class="tab-item" data-target="nav-settings" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2"/></svg><span>Settings</span>
+        </div>
+        <div class="tab-item" data-target="nav-profile-teacher" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>Profile</span>
+        </div>
+      </div>
+    </nav>
 
     <div class="main">
       <div class="topbar">
@@ -1206,6 +1275,23 @@ function showPanel(name, el) {
   if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; editingDueDateId=null; renderAssignments(); }
   if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; loadCoTeacherPanel(); }
   if (name==='profile') { profileEditMode=false; renderProfile(); }
+  syncMobileNav();
+}
+
+// Phone tab bar: mirror whichever sidebar group is visible, and its active item.
+function mobileTab(tab) {
+  var target = document.getElementById(tab.dataset.target);
+  if (target) target.click();
+  window.scrollTo(0, 0);
+}
+function syncMobileNav() {
+  var teacherNav = document.getElementById('teacher-nav'), studentNav = document.getElementById('student-nav');
+  document.getElementById('mobile-teacher-tabs').style.display = teacherNav.style.display === 'none' ? 'none' : '';
+  document.getElementById('mobile-student-tabs').style.display = studentNav.style.display === 'none' ? 'none' : '';
+  document.querySelectorAll('.mobile-tabbar .tab-item').forEach(function(t) {
+    var target = document.getElementById(t.dataset.target);
+    t.classList.toggle('active', !!(target && target.classList.contains('active')));
+  });
 }
 
 // ══════════════════════════════════════════
@@ -1379,7 +1465,7 @@ function renderStudentQuestions() {
             +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
             +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkFormula('+q.id+')" style="width:auto;">Check answer</button></div>';
       } else if (q.type==='sci') {
-        body='<div class="sci-group"><input class="sci-input" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
+        body='<div class="sci-group"><input class="sci-input sci-coeff" id="scoeff-'+q.id+'" type="number" step="any" placeholder="coefficient"><span class="sci-sep">× 10^</span><input class="sci-input sci-exp" id="sexp-'+q.id+'" type="number" step="1" placeholder="exp"></div>'
             +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
             +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkSci('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
       } else if (q.type==='mc') {

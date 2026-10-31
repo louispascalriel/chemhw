@@ -1499,7 +1499,7 @@ function restoreAnsweredState(q) {
   var qid=q.id, el=document.getElementById('res-'+qid);
   if (!el) return;
   if (solved[qid]) {
-    el.className='result-msg correct'; el.innerHTML='✓ Correct — you already solved this one.';
+    el.className='result-msg correct'; el.innerHTML='✓ Correct!';
     if (q.type==='mc') markMCSolved(q);
     lockQ(qid, true);
   } else if (!UNLIMITED && (usedAttempts[qid]||0)>=MAX) {

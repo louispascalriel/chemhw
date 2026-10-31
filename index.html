@@ -767,7 +767,108 @@ function loadCFG() {
   try { var a = localStorage.getItem('chemhw_assignments'); if(a){ var d=JSON.parse(a); if(d.assignments){ assignments=d.assignments; nextAssignmentId=d.nextId||nextAssignmentId; } } } catch(e){}
 }
 function saveCFG() { localStorage.setItem('chemhw_cfg', JSON.stringify(CFG)); }
-function saveQuestions() { localStorage.setItem('chemhw_questions', JSON.stringify({questions:questions,nextId:nextId})); }
+function saveQuestions() { localStorage.setItem('chemhw_questions', JSON.stringify({questions:questions,nextId:nextId})); scheduleCloudSave(); }
+
+// ══════════════════════════════════════════
+//  CLASS CONTENT SYNC — questions + assignments live in Supabase (table: class_content)
+//  so students on any device see what the teacher built. localStorage is only a cache.
+// ══════════════════════════════════════════
+var cloudContentReady = false;   // true once we've successfully read class_content this session
+var cloudSaveTimer = null, cloudSaveInFlight = false, cloudSavePending = false, cloudDirty = false;
+
+function isTeacherUser() { return !!(currentProfile && currentProfile.role === 'teacher'); }
+function maxItemId(arr) { return (arr||[]).reduce(function(m,x){ return Math.max(m, Number(x && x.id)||0); }, 0); }
+function cacheContentLocally() {
+  localStorage.setItem('chemhw_questions', JSON.stringify({questions:questions,nextId:nextId}));
+  localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId}));
+}
+
+async function loadClassContent() {
+  cloudContentReady = false;
+  var hadLocal = !!(localStorage.getItem('chemhw_questions') || localStorage.getItem('chemhw_assignments'));
+  var r = await sbSelect('class_content', 'class_code=eq.'+encodeURIComponent(CFG.classCode)+'&limit=1');
+  if (r.error) {
+    console.error('ChemHW: could not load class_content', r.error);
+    showSyncStatus('error', isTeacherUser()
+      ? 'Could not load questions from the database ('+(r.error.message||r.error.code||'error')+'). Edits will NOT be saved until this is fixed — refresh to retry.'
+      : 'Could not load assignments. Check your connection and refresh the page.');
+    return;
+  }
+  var row = r.data && r.data[0];
+  if (row) {
+    var cq = Array.isArray(row.questions) ? row.questions : [];
+    var ca = Array.isArray(row.assignments) ? row.assignments : [];
+    // Safety net: if this teacher browser held different local data, keep a copy before replacing it.
+    if (isTeacherUser() && hadLocal) {
+      var localStr = JSON.stringify({questions:questions, assignments:assignments, nextId:nextId, nextAssignmentId:nextAssignmentId});
+      if (JSON.stringify({questions:questions, assignments:assignments}) !== JSON.stringify({questions:cq, assignments:ca})) {
+        try { localStorage.setItem('chemhw_local_backup', localStr); localStorage.setItem('chemhw_local_backup_at', new Date().toISOString()); } catch(e){}
+      }
+    }
+    questions = cq;
+    assignments = ca;
+    nextId = Math.max(Number(row.next_question_id)||1, maxItemId(cq)+1);
+    nextAssignmentId = Math.max(Number(row.next_assignment_id)||1, maxItemId(ca)+1);
+    cacheContentLocally();
+    cloudContentReady = true;
+  } else {
+    // No class content in the database yet.
+    cloudContentReady = true;
+    // First-time migration: upload this teacher browser's existing questions/assignments.
+    if (isTeacherUser() && hadLocal) await pushClassContent();
+  }
+}
+
+function scheduleCloudSave() {
+  if (!isTeacherUser()) return;
+  cloudDirty = true;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(pushClassContent, 500);
+}
+
+async function pushClassContent() {
+  if (!isTeacherUser() || !currentUser) return;
+  if (!cloudContentReady) { showSyncStatus('error', 'Not saved to the database — content failed to load. Refresh the page before editing.'); return; }
+  if (cloudSaveInFlight) { cloudSavePending = true; return; }
+  cloudSaveInFlight = true; cloudSavePending = false;
+  showSyncStatus('saving');
+  try {
+    await maybeRefreshToken();
+    var body = { class_code: CFG.classCode, questions: questions, next_question_id: nextId, assignments: assignments, next_assignment_id: nextAssignmentId, updated_at: new Date().toISOString(), updated_by: currentUser.id };
+    var res = await fetch(CFG.url + '/rest/v1/class_content?on_conflict=class_code', {
+      method: 'POST',
+      headers: Object.assign({}, sbHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) { var e = {}; try { e = await res.json(); } catch(_){} throw new Error(e.message || ('HTTP ' + res.status)); }
+    if (!cloudSavePending) { cloudDirty = false; showSyncStatus('saved'); }
+  } catch (err) {
+    console.error('ChemHW: failed to save class content', err);
+    showSyncStatus('error', 'Not saved to the database: ' + err.message + '. Your changes are kept in this browser — click here to retry.', true);
+  }
+  cloudSaveInFlight = false;
+  if (cloudSavePending) pushClassContent();
+}
+
+function showSyncStatus(state, msg, retry) {
+  var el = document.getElementById('sync-status');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'sync-status';
+    el.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:9999;padding:8px 14px;border-radius:12px;font-size:13px;box-shadow:var(--shadow);border:1px solid var(--border);max-width:380px;line-height:1.4;';
+    document.body.appendChild(el);
+  }
+  clearTimeout(el._hideTimer); el.onclick = null; el.style.cursor = 'default';
+  if (state === 'hide') { el.style.display = 'none'; return; }
+  if (state === 'saving') { el.textContent = 'Saving…'; el.style.background = 'var(--surface)'; el.style.color = 'var(--text2)'; }
+  else if (state === 'saved') { el.textContent = '✓ Saved to database'; el.style.background = 'var(--green-light)'; el.style.color = 'var(--green)'; el._hideTimer = setTimeout(function(){ el.style.display = 'none'; }, 2500); }
+  else { el.textContent = msg; el.style.background = 'var(--red-light)'; el.style.color = 'var(--red)'; if (retry) { el.style.cursor = 'pointer'; el.onclick = function(){ pushClassContent(); }; } }
+  el.style.display = 'block';
+}
+
+// Warn the teacher before closing the tab if edits haven't reached the database yet.
+window.addEventListener('beforeunload', function(e) {
+  if (isTeacherUser() && (cloudDirty || cloudSaveInFlight)) { e.preventDefault(); e.returnValue = ''; }
+});
 
 // ── Supabase REST helpers (no library needed) ──
 function sbHeaders() {
@@ -834,7 +935,9 @@ async function boot() {
   if (session && session.user) {
     currentUser = session.user;
     currentUser.access_token = session.access_token;
+    await maybeRefreshToken();   // stored session may have expired since last visit
     await loadProfile(session.user);
+    await loadClassContent();
     showApp();
   } else {
     showScreen('auth');
@@ -920,6 +1023,7 @@ async function doLogin() {
   currentUser = data.user; currentUser.access_token = data.access_token;
   sbSaveSession(data);
   await loadProfile(data.user);
+  await loadClassContent();
   showApp();
 }
 
@@ -972,7 +1076,9 @@ async function doRegister() {
   var btn=document.getElementById('reg-btn'); btn.disabled=true; btn.textContent='Creating account…';
   var data = await sbSignUp(email, pass);
   var errMsg = data.error_description || data.msg || data.error?.message || data.message || JSON.stringify(data); if (data.error || data.error_description || !data.user) { btn.disabled=false; btn.textContent='Create account'; showAuthMsg('reg-msg', errMsg,'error'); return; }
-  var role = (uname==='teacher'||uname==='admin')?'teacher':'student';
+  // Every self-registered account is a student. Teacher access is granted only via
+  // Settings → Co-teacher access (service key), and the database enforces this too.
+  var role = 'student';
   currentUser = data.user; currentUser.access_token = data.access_token;
   sbSaveSession(data);
   var pe = await sbInsert('profiles', { id: data.user.id, username: uname, role, class_code: code, email, first_name: '', last_name: '' });
@@ -980,6 +1086,7 @@ async function doRegister() {
   if (pe.error) { showAuthMsg('reg-msg','Account created but profile failed: '+(pe.error.message||JSON.stringify(pe.error)),'error'); return; }
   showAuthMsg('reg-msg','Account created! Signing you in…','success');
   await loadProfile(data.user);
+  await loadClassContent();
   showApp();
 }
 
@@ -989,15 +1096,8 @@ async function loadProfile(user) {
   // Synthesize profile from email if DB read failed
   if (!currentProfile && user.email) {
     var uname = user.email.includes('.student@chemhw.edu') ? user.email.split('.student@')[0] : user.email.split('@')[0];
-    currentProfile = { id: user.id, username: uname, role: (uname==='teacher'||uname==='admin') ? 'teacher' : 'student' };
-  }
-  if (currentProfile && (currentProfile.username === 'teacher' || currentProfile.username === 'admin') && currentProfile.role !== 'teacher') {
-    currentProfile.role = 'teacher';
-    await fetch(CFG.url + '/rest/v1/profiles?id=eq.' + user.id, {
-      method: 'PATCH',
-      headers: Object.assign({}, sbHeaders(), { 'Prefer': 'return=minimal' }),
-      body: JSON.stringify({ role: 'teacher' })
-    });
+    // Fallback never grants teacher access — the role must come from the database.
+    currentProfile = { id: user.id, username: uname, role: 'student' };
   }
   if (currentProfile && currentProfile.role === 'student') {
     var history = Array.isArray(currentProfile.login_history) ? currentProfile.login_history : [];
@@ -1013,8 +1113,11 @@ async function loadProfile(user) {
 }
 
 async function doLogout() {
+  // Flush any pending teacher edits while the session is still valid.
+  if (cloudDirty && cloudContentReady) { clearTimeout(cloudSaveTimer); try { await pushClassContent(); } catch(e){} }
   try { await fetch(CFG.url+'/auth/v1/logout', { method:'POST', headers:{ 'apikey':CFG.key,'Authorization':'Bearer '+(currentUser?.access_token||CFG.key) } }); } catch(e){}
   sbSaveSession(null);
+  clearTimeout(cloudSaveTimer); cloudContentReady=false; cloudDirty=false; showSyncStatus('hide');
   currentUser=null; currentProfile=null;
   showScreen('auth');
 }
@@ -1024,8 +1127,7 @@ async function doLogout() {
 // ══════════════════════════════════════════
 function showApp() {
   showScreen('app');
-  var emailUname = currentUser && currentUser.email ? (currentUser.email.includes('.student@chemhw.edu') ? currentUser.email.split('.student@')[0] : currentUser.email.split('@')[0]) : '';
-  var isTeacher = (currentProfile && (currentProfile.role==='teacher' || currentProfile.username==='teacher' || currentProfile.username==='admin')) || emailUname==='teacher' || emailUname==='admin';
+  var isTeacher = isTeacherUser();   // database role only — usernames grant nothing
   document.getElementById('teacher-nav').style.display = isTeacher ? '' : 'none';
   document.getElementById('student-nav').style.display = isTeacher ? 'none' : '';
   var uname = currentProfile ? currentProfile.username : (currentUser ? currentUser.email : '?');
@@ -1909,7 +2011,7 @@ function resetBuilderForm() {
 // ══════════════════════════════════════════
 var assignments=[], nextAssignmentId=1, editingAssignmentId=null, renamingAssignmentId=null, editingDueDateId=null, movingUnitId=null, newAsgnCategory='HW', newAsgnSection='', collapsedFolders={};
 
-function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); }
+function saveAssignments() { localStorage.setItem('chemhw_assignments', JSON.stringify({assignments:assignments,nextId:nextAssignmentId})); scheduleCloudSave(); }
 
 function renderAssignments() {
   var el=document.getElementById('assignments-main'); if(!el) return;

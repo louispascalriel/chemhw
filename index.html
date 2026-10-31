@@ -82,6 +82,8 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 .nav-item:hover { background: var(--surface2); color: var(--text); }
 .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-light); font-weight: 500; }
 .nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.nav-sub { display: block; font-size: 11px; font-weight: 400; color: var(--text3); line-height: 1.2; }
+.tab-sub { font-size: 9px !important; font-weight: 400; color: var(--text3); margin-top: -2px; }
 .sidebar-footer { margin-top: auto; padding: 1rem 1.25rem 0; border-top: 1px solid var(--border); }
 .sidebar-footer p { font-size: 11px; color: var(--text3); line-height: 1.5; }
 
@@ -431,7 +433,7 @@ grant select on student_results to service_role;
       </div>
       <div class="nav-item" id="nav-hw" onclick="showStudentCategory('HW',this)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg>
-        Homework (HW)
+        <span>Homework (HW)<span class="nav-sub">Not used</span></span>
       </div>
       <div class="nav-item" id="nav-profile-student" onclick="showPanel('profile',this)">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
@@ -472,11 +474,11 @@ grant select on student_results to service_role;
     <!-- Phone navigation (shown ≤640px instead of the sidebar). Each tab triggers the matching sidebar item. -->
     <nav class="mobile-tabbar" aria-label="Main navigation">
       <div class="tab-group" id="mobile-student-tabs">
-        <div class="tab-item" data-target="nav-hw" onclick="mobileTab(this)" role="button" tabindex="0">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg><span>Homework</span>
-        </div>
         <div class="tab-item" data-target="nav-ice" onclick="mobileTab(this)" role="button" tabindex="0">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M3 5l5-3 5 3M3 11l5 3 5-3"/></svg><span>In-Class</span>
+        </div>
+        <div class="tab-item" data-target="nav-hw" onclick="mobileTab(this)" role="button" tabindex="0">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 8h6M5 5h6M5 11h4"/></svg><span>Homework</span><span class="tab-sub">Not used</span>
         </div>
         <div class="tab-item" data-target="nav-profile-student" onclick="mobileTab(this)" role="button" tabindex="0">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg><span>Profile</span>
@@ -639,23 +641,34 @@ grant select on student_results to service_role;
         <div id="panel-settings" class="panel">
           <div class="card">
             <div class="card-title" style="margin-bottom:1rem;">Attempt settings</div>
-            <div class="settings-bar" style="margin:0;">
-              <label>Max attempts per question:</label>
-              <input class="settings-input" id="max-input" type="number" min="1" max="999" value="3">
-              <label class="unlim-label"><input type="checkbox" id="unlim-chk" onchange="toggleUnlim(this)"> Unlimited</label>
-              <button class="btn btn-primary btn-sm" onclick="applySettings()">Apply &amp; reset</button>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Max attempts per question. Applies to every student.</p>
+            <div class="settings-bar" style="margin:0 0 8px;">
+              <label style="min-width:140px;">In-Class (ICE):</label>
+              <input class="settings-input" id="max-ice" type="number" min="1" max="999" value="1">
+              <label class="unlim-label"><input type="checkbox" id="unlim-ice" onchange="toggleUnlim(this,'ICE')"> Unlimited</label>
+            </div>
+            <div class="settings-bar" style="margin:0 0 12px;">
+              <label style="min-width:140px;">Homework (HW):</label>
+              <input class="settings-input" id="max-hw" type="number" min="1" max="999" value="3">
+              <label class="unlim-label"><input type="checkbox" id="unlim-hw" onchange="toggleUnlim(this,'HW')"> Unlimited</label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" onclick="applySettings()" style="width:auto;">Save attempt limits</button>
               <span style="font-size:12px;color:var(--text3);" id="settings-note"></span>
             </div>
           </div>
           <div class="card" style="margin-top:1rem;">
             <div class="card-title" style="margin-bottom:0.5rem;">Fix permissions (migration)</div>
             <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">If students see a "Could not save" error, your Supabase tables are missing role grants. Run this in your <em>Supabase SQL Editor</em>:</p>
-            <pre id="fix-sql" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'DM Mono',monospace;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--text);margin-bottom:8px;">grant usage on schema public to anon, authenticated, service_role;
-grant select, update on profiles to authenticated;
+            <pre id="fix-sql" style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px;font-size:11px;font-family:'DM Mono',monospace;overflow-x:auto;white-space:pre;line-height:1.5;color:var(--text);margin-bottom:8px;">-- Safe to re-run. Matches the 2026-10-31 lockdown (no public reads; users can't change their role).
+grant usage on schema public to anon, authenticated, service_role;
+grant select on profiles to authenticated;
+grant update (username, email, first_name, last_name, login_history) on profiles to authenticated;
 grant select, update on profiles to service_role;
-grant select on profiles to anon;
 grant select, insert on student_results to authenticated;
-grant select on student_results to service_role;</pre>
+grant select on student_results to service_role;
+grant select, insert, update on class_content to authenticated;
+grant all on class_content to service_role;</pre>
             <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('fix-sql').textContent)">Copy SQL</button>
           </div>
           <div class="card" style="margin-top:1rem;">
@@ -881,6 +894,8 @@ async function loadClassContent() {
     assignments = ca;
     nextId = Math.max(Number(row.next_question_id)||1, maxItemId(cq)+1);
     nextAssignmentId = Math.max(Number(row.next_assignment_id)||1, maxItemId(ca)+1);
+    attemptLimits = JSON.parse(JSON.stringify(DEFAULT_ATTEMPT_LIMITS));
+    if (row.settings && row.settings.attempts) mergeAttemptLimits(row.settings.attempts);
     cacheContentLocally();
     cloudContentReady = true;
   } else {
@@ -906,14 +921,27 @@ async function pushClassContent() {
   showSyncStatus('saving');
   try {
     await maybeRefreshToken();
-    var body = { class_code: CFG.classCode, questions: questions, next_question_id: nextId, assignments: assignments, next_assignment_id: nextAssignmentId, updated_at: new Date().toISOString(), updated_by: currentUser.id };
-    var res = await fetch(CFG.url + '/rest/v1/class_content?on_conflict=class_code', {
-      method: 'POST',
-      headers: Object.assign({}, sbHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) { var e = {}; try { e = await res.json(); } catch(_){} throw new Error(e.message || ('HTTP ' + res.status)); }
-    if (!cloudSavePending) { cloudDirty = false; showSyncStatus('saved'); }
+    var body = { class_code: CFG.classCode, questions: questions, next_question_id: nextId, assignments: assignments, next_assignment_id: nextAssignmentId, settings: { attempts: attemptLimits }, updated_at: new Date().toISOString(), updated_by: currentUser.id };
+    var post = function(b) {
+      return fetch(CFG.url + '/rest/v1/class_content?on_conflict=class_code', {
+        method: 'POST',
+        headers: Object.assign({}, sbHeaders(), { 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
+        body: JSON.stringify(b)
+      });
+    };
+    var res = await post(body), settingsSkipped = false;
+    if (!res.ok) {
+      var e = {}; try { e = await res.json(); } catch(_){}
+      // Database without the settings column yet: save everything else, then warn.
+      if (/settings/i.test(e.message || '')) {
+        delete body.settings; settingsSkipped = true;
+        res = await post(body);
+        if (!res.ok) { e = {}; try { e = await res.json(); } catch(_){} }
+      }
+      if (!res.ok) throw new Error(e.message || ('HTTP ' + res.status));
+    }
+    if (settingsSkipped) { if (!cloudSavePending) cloudDirty = false; showSyncStatus('error', 'Questions saved, but attempt limits were NOT saved — run the latest ChemHW SQL (adds the settings column) in Supabase.'); }
+    else if (!cloudSavePending) { cloudDirty = false; showSyncStatus('saved'); }
   } catch (err) {
     console.error('ChemHW: failed to save class content', err);
     showSyncStatus('error', 'Not saved to the database: ' + err.message + '. Your changes are kept in this browser — click here to retry.', true);
@@ -1232,7 +1260,7 @@ function showApp() {
   } else {
     resetStudentState();
     renderBank();
-    showStudentCategory('HW', document.getElementById('nav-hw'));
+    showStudentCategory('ICE', document.getElementById('nav-ice'));   // HW not used this term — land on In-Class
     document.getElementById('student-questions').innerHTML='<div class="loading">Loading your progress…</div>';
     loadStudentProgress().then(function() {
       renderStudentQuestions();
@@ -1253,7 +1281,7 @@ function enterStudentView() {
   var banner = document.getElementById('student-view-banner');
   banner.style.display = 'flex';
   resetStudentState();
-  showStudentCategory('HW', document.getElementById('nav-hw'));
+  showStudentCategory('ICE', document.getElementById('nav-ice'));   // HW not used this term — land on In-Class
 }
 
 function exitStudentView() {
@@ -1276,7 +1304,7 @@ function showPanel(name, el) {
   document.getElementById('topbar-title').textContent = titles[name]||name;
   if (name==='dashboard') loadDashboard();
   if (name==='assignments') { editingAssignmentId=null; renamingAssignmentId=null; editingDueDateId=null; renderAssignments(); }
-  if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; loadCoTeacherPanel(); }
+  if (name==='settings') { var ski=document.getElementById('service-key-input'); if(ski) ski.value=CFG.serviceKey||''; renderAttemptSettings(); loadCoTeacherPanel(); }
   if (name==='profile') { profileEditMode=false; renderProfile(); }
   syncMobileNav();
 }
@@ -1308,7 +1336,24 @@ var questions = [
   { id:5, type:'calc', text:'Calculate the molar mass of <strong>NaCl</strong>. (Na = 22.99, Cl = 35.45)', correctVal:58.44, unit:'g/mol', tol:0.02, hint:'Add the atomic masses of Na and Cl.', category:'HW' }
 ];
 var nextId = 6;
+// Attempt limits per category. MAX/UNLIMITED hold the limits for the category currently shown.
+// Teacher sets these in Settings; they're saved in class_content.settings so every student gets them.
+var DEFAULT_ATTEMPT_LIMITS = { HW: { max: 3, unlimited: false }, ICE: { max: 1, unlimited: false } };
+var attemptLimits = JSON.parse(JSON.stringify(DEFAULT_ATTEMPT_LIMITS));
 var MAX=3, UNLIMITED=false;
+function applyLimitsFor(cat) {
+  var s = attemptLimits[cat] || attemptLimits.HW;
+  MAX = Math.max(1, parseInt(s.max) || 1);
+  UNLIMITED = !!s.unlimited;
+}
+function mergeAttemptLimits(saved) {
+  ['HW','ICE'].forEach(function(cat){
+    if (saved && saved[cat]) {
+      var m = parseInt(saved[cat].max);
+      attemptLimits[cat] = { max: (isNaN(m) || m < 1) ? DEFAULT_ATTEMPT_LIMITS[cat].max : m, unlimited: !!saved[cat].unlimited };
+    }
+  });
+}
 var usedAttempts={}, solved={};
 var studentCategory='HW';
 var studentAssignment=null;
@@ -1362,6 +1407,7 @@ function backToAssignments() {
 }
 
 function renderStudentQuestions() {
+  applyLimitsFor(studentCategory);
   var container = document.getElementById('student-questions');
   var catQs = questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
 
@@ -1489,7 +1535,7 @@ function renderStudentQuestions() {
       updateAttemptUI(q.id);
     }
     container.appendChild(div);
-    if (!readOnly) restoreAnsweredState(q);
+    if (!readOnly) { updateAttemptUI(q.id); restoreAnsweredState(q); }   // must run after the card is in the page
   });
 }
 
@@ -1616,7 +1662,7 @@ function updateAttemptUI(qid) {
   var used=usedAttempts[qid]||0, rem=MAX-used;
   if (solved[qid]) { el.textContent='Solved'; el.className='attempt-status solved'; bar.style.width='100%'; bar.style.background='var(--green)'; return; }
   if (rem<=0) { el.textContent='No attempts left'; el.className='attempt-status danger'; bar.style.width='0%'; return; }
-  el.textContent=rem+' of '+MAX+' left';
+  el.textContent = MAX===1 ? '1 attempt only' : rem+' of '+MAX+' left';
   var pct=Math.round((rem/MAX)*100);
   bar.style.width=pct+'%'; bar.style.background=pct<=33?'var(--red)':pct<=60?'#d4881e':'var(--accent)';
   el.className='attempt-status'+(pct<=33?' danger':pct<=60?' warn':' ok');
@@ -2017,13 +2063,27 @@ function setTeacherRoleFromEl(btn, grant) {
   });
 }
 
-function toggleUnlim(chk) { document.getElementById('max-input').disabled=chk.checked; }
+function toggleUnlim(chk, cat) { document.getElementById('max-'+cat.toLowerCase()).disabled=chk.checked; }
+function renderAttemptSettings() {
+  ['HW','ICE'].forEach(function(cat){
+    var k=cat.toLowerCase(), s=attemptLimits[cat];
+    var mi=document.getElementById('max-'+k), ui=document.getElementById('unlim-'+k);
+    if (mi) { mi.value=s.max; mi.disabled=!!s.unlimited; }
+    if (ui) ui.checked=!!s.unlimited;
+  });
+}
 function applySettings() {
-  UNLIMITED=document.getElementById('unlim-chk').checked;
-  if (!UNLIMITED) { var v=parseInt(document.getElementById('max-input').value); MAX=(isNaN(v)||v<1)?1:v; document.getElementById('max-input').value=MAX; }
+  ['HW','ICE'].forEach(function(cat){
+    var k=cat.toLowerCase();
+    var v=parseInt(document.getElementById('max-'+k).value);
+    attemptLimits[cat]={ max:(isNaN(v)||v<1)?1:v, unlimited:document.getElementById('unlim-'+k).checked };
+  });
+  renderAttemptSettings();
+  scheduleCloudSave();   // saved with the class content so every student gets these limits
   resetStudentState(); renderStudentQuestions(); updateScore();
-  var n=document.getElementById('settings-note'); n.textContent=UNLIMITED?'Unlimited applied!':'Max '+MAX+' applied!';
-  setTimeout(function(){ n.textContent=''; },2000);
+  function d(cat){ var s=attemptLimits[cat]; return s.unlimited?'unlimited':s.max+' attempt'+(s.max===1?'':'s'); }
+  var n=document.getElementById('settings-note'); n.textContent='Saved — ICE: '+d('ICE')+', HW: '+d('HW')+'.';
+  setTimeout(function(){ n.textContent=''; },4000);
 }
 
 // ══════════════════════════════════════════

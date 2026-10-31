@@ -1019,9 +1019,18 @@ async function doLogin() {
     // Typed an email address — sign in with it directly.
     email = username;
   } else {
-    // Look up real email from profiles (anon read), fall back to legacy fake email
-    var pr = await sbSelect('profiles', 'username=eq.'+encodeURIComponent(username)+'&select=email&limit=1');
-    email = (pr.data && pr.data[0] && pr.data[0].email) || (username+'.student@chemhw.edu');
+    // Look up this username's email via a narrow DB function (profiles are not publicly readable).
+    var found = null;
+    try {
+      var rr = await fetch(CFG.url + '/rest/v1/rpc/email_for_username', { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':CFG.key, 'Authorization':'Bearer '+CFG.key }, body: JSON.stringify({ uname: username }) });
+      if (rr.ok) { found = await rr.json(); }
+      else {
+        // Fallback for databases that haven't run the lockdown migration yet.
+        var pr = await sbSelect('profiles', 'username=eq.'+encodeURIComponent(username)+'&select=email&limit=1');
+        found = pr.data && pr.data[0] && pr.data[0].email;
+      }
+    } catch(e) { console.error('ChemHW: username lookup failed', e); }
+    email = found || (username+'.student@chemhw.edu');   // legacy fake-email accounts
   }
   var data = await sbSignIn(email, pass);
   btn.disabled=false; btn.textContent='Sign in';

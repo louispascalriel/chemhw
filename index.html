@@ -748,12 +748,21 @@ grant select on student_results to service_role;</pre>
 // ══════════════════════════════════════════
 //  CONFIG  —  filled on setup or from localStorage
 // ══════════════════════════════════════════
-var CFG = { url:'', key:'', classCode:'', serviceKey:'' };
+// Built-in connection so every browser (students included) skips the Setup screen.
+// The anon key is designed to be public; data is protected by Supabase RLS policies.
+// NEVER put the service_role key here — it stays in the teacher's browser only (Settings).
+var DEFAULT_CFG = {
+  url: 'https://amxzoiyoedvdbtyimpjt.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFteHpvaXlvZWR2ZGJ0eWltcGp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NTMxODYsImV4cCI6MjA4OTQyOTE4Nn0.Hf2njpN81e4Jbh2jLQars2UI9WTTEbyS17T_yszTQes',
+  classCode: '1128Q'
+};
+var CFG = { url:DEFAULT_CFG.url, key:DEFAULT_CFG.key, classCode:DEFAULT_CFG.classCode, serviceKey:'' };
 var currentUser = null;
 var currentProfile = null;
 
 function loadCFG() {
-  try { var s = localStorage.getItem('chemhw_cfg'); if(s) CFG = JSON.parse(s); } catch(e){}
+  // Built-in url/key/classCode always win; only the teacher's service key comes from this browser.
+  try { var s = localStorage.getItem('chemhw_cfg'); if(s){ var saved = JSON.parse(s); CFG.serviceKey = (saved && saved.serviceKey) || ''; } } catch(e){}
   try { var q = localStorage.getItem('chemhw_questions'); if(q){ var d=JSON.parse(q); if(d.questions&&d.questions.length){ questions=d.questions; nextId=d.nextId||nextId; } } } catch(e){}
   try { var a = localStorage.getItem('chemhw_assignments'); if(a){ var d=JSON.parse(a); if(d.assignments){ assignments=d.assignments; nextAssignmentId=d.nextId||nextAssignmentId; } } } catch(e){}
 }

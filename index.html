@@ -206,6 +206,11 @@ body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--te
 body.asgn-dragging, body.asgn-dragging * { cursor: grabbing !important; user-select: none; }
 .bank-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
 .bank-item-body { flex: 1; min-width: 0; }
+.ao-q .bank-item-body { cursor: pointer; }
+.ao-caret { display: inline-block; color: var(--text3); font-size: 11px; transition: transform 0.15s; }
+.ao-q.open .ao-caret { transform: rotate(90deg); }
+.bank-item-detail { cursor: default; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.bank-item-detail .q-figure img { max-width: 100%; }
 .bank-item-q { font-size: 14px; color: var(--text); margin-bottom: 3px; }
 .bank-item-meta { font-size: 12px; color: var(--text3); }
 .bank-actions { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; align-items: flex-start; }
@@ -2532,15 +2537,37 @@ function adoptAssignment(name) {
   renderAssignments();
 }
 
+// AO → Manage questions: click a question to expand its full text, figure/table, and answer.
+var aoExpandedQs={};   // stays open across re-renders (e.g. after Add/Remove)
+function toggleAoQ(qid) {
+  aoExpandedQs[qid]=!aoExpandedQs[qid];
+  document.querySelectorAll('[data-ao-q="'+qid+'"]').forEach(function(item){
+    item.classList.toggle('open', !!aoExpandedQs[qid]);
+    var d=item.querySelector('.bank-item-detail'); if(d) d.style.display=aoExpandedQs[qid]?'block':'none';
+  });
+}
+function aoDetailHtml(q) {
+  var extra='';
+  if (q.type==='formula' && (q.answers||[]).length>1)
+    extra='<div style="font-size:12px;color:var(--text2);margin-top:6px;">Also accepted: '+q.answers.slice(1).map(function(x){ return parseChem(x); }).join(', ')+'</div>';
+  if ((q.type==='sci'||q.type==='calc') && q.tol!=null)
+    extra+='<div style="font-size:12px;color:var(--text2);margin-top:6px;">Tolerance: ±'+(q.tol*100).toFixed(1)+'%</div>';
+  return '<div class="q-text" style="margin-top:8px;">'+q.text+'</div>'+figHtmlFor(q)
+    +(q.hint?'<div class="hint">'+q.hint+'</div>':'')+correctAnswerHtml(q)+extra;
+}
 function bankItemHtml(q, actionHtml) {
   var tl={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
-  return '<div class="bank-item" style="margin-bottom:6px;">'
-    +'<div class="bank-item-body"><div class="bank-item-q">'+q.text.replace(/<[^>]+>/g,'').substring(0,90)+'</div>'
+  var open=!!aoExpandedQs[q.id];
+  return '<div class="bank-item ao-q'+(open?' open':'')+'" data-ao-q="'+q.id+'" style="margin-bottom:6px;">'
+    +'<div class="bank-item-body" onclick="toggleAoQ('+q.id+')" title="Click to show the full question and answer">'
+    +'<div class="bank-item-q"><span class="ao-caret">&#9656;</span> '+q.text.replace(/<[^>]+>/g,'').substring(0,90)+'</div>'
     +'<div class="bank-item-meta" style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
     +'<span class="badge badge-'+q.type+'">'+tl[q.type]+'</span>'
     +(q.section?'<span style="font-size:11px;color:var(--text2);">'+q.section+'</span>':'')
     +(q.keywords&&q.keywords.length?'<span style="font-size:11px;color:var(--accent);">'+q.keywords.join(', ')+'</span>':'')
-    +'</div></div><div class="bank-actions"><button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit</button>'+actionHtml+'</div></div>';
+    +'</div>'
+    +'<div class="bank-item-detail" onclick="event.stopPropagation()" style="display:'+(open?'block':'none')+';">'+aoDetailHtml(q)+'</div>'
+    +'</div><div class="bank-actions"><button class="btn btn-secondary btn-sm" onclick="openEditModal('+q.id+')">Edit</button>'+actionHtml+'</div></div>';
 }
 
 function renderAssignmentEditor(el) {

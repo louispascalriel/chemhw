@@ -2750,7 +2750,7 @@ function deleteAssignment(id) {
   renderAssignments(); renderBank(); renderStudentQuestions();
 }
 
-function openAssignmentEditor(id) { editingAssignmentId=id; renderAssignments(); }
+function openAssignmentEditor(id) { editingAssignmentId=id; aoExpandedQs={}; renderAssignments(); }   // every assignment opens with questions collapsed
 function closeAssignmentEditor() { editingAssignmentId=null; renderAssignments(); }
 
 function startRename(id) { editingDueDateId=null; movingUnitId=null; renamingAssignmentId=id; renderAssignments(); setTimeout(function(){ var el=document.getElementById('rename-input-'+id); if(el){el.focus();el.select();} },0); }

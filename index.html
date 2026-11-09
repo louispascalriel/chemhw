@@ -1414,6 +1414,26 @@ var Q_BADGE_CLASS={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'b
 var Q_BADGE_NAME={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
 function escHtml(s) { return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 
+// Students see assignments in the teacher's organizer order: ICE units A→Z (no unit last), then the
+// dragged order within each unit; HW in list order. Questions keep their order within an assignment.
+function sortByOrganizer(qs) {
+  var rank={};
+  assignments.map(function(a,i){ return { a:a, i:i }; })
+    .sort(function(x,y){
+      var ux=x.a.category==='ICE'?(x.a.courseSection||''):'', uy=y.a.category==='ICE'?(y.a.courseSection||''):'';
+      if (ux!==uy) { if (!ux) return 1; if (!uy) return -1; return ux.localeCompare(uy); }
+      return x.i-y.i;
+    })
+    .forEach(function(x,r){ rank[x.a.name]=r; });
+  return qs.map(function(q,i){ return { q:q, i:i }; })
+    .sort(function(x,y){
+      var rx=rank[x.q.assignment||'General'], ry=rank[y.q.assignment||'General'];
+      rx=rx===undefined?1e9:rx; ry=ry===undefined?1e9:ry;
+      return rx!==ry ? rx-ry : x.i-y.i;
+    })
+    .map(function(x){ return x.q; });
+}
+
 function figHtmlFor(q) {
   var figHtml='';
   if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
@@ -1493,7 +1513,7 @@ function appendIceReview(container) {
 function renderStudentQuestions() {
   applyLimitsFor(studentCategory);
   var container = document.getElementById('student-questions');
-  var catQs = questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; });
+  var catQs = sortByOrganizer(questions.filter(function(q){ return (q.category||'HW')===studentCategory && !q.hidden; }));
 
   // HW: show assignment picker when no assignment is selected
   if (studentCategory==='HW' && studentAssignment===null) {

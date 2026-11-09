@@ -207,8 +207,13 @@ body.asgn-dragging, body.asgn-dragging * { cursor: grabbing !important; user-sel
 .bank-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); margin-bottom: 8px; }
 .bank-item-body { flex: 1; min-width: 0; }
 .ao-q .bank-item-body { cursor: pointer; }
-.ao-caret { display: inline-block; color: var(--text3); font-size: 11px; transition: transform 0.15s; }
-.ao-q.open .ao-caret { transform: rotate(90deg); }
+.ao-caret { display: inline-block; color: var(--text3); font-size: 14px; transition: transform 0.15s; }
+.ao-q.open .ao-caret, .ao-caret.open { transform: rotate(90deg); }
+.ao-asgn-name { cursor: pointer; }
+.ao-asgn-name:hover { color: var(--accent); }
+.bank-item.ao-asgn-open { flex-wrap: wrap; }
+.ao-asgn-qs { flex-basis: 100%; margin-top: 4px; padding: 10px 0 0 14px; border-top: 1px dashed var(--border); }
+.ao-asgn-qs .bank-item { background: var(--surface2); }
 .bank-item-detail { cursor: default; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
 .bank-item-detail .q-figure img { max-width: 100%; }
 .bank-item-q { font-size: 14px; color: var(--text); margin-bottom: 3px; }
@@ -2471,7 +2476,14 @@ function renderAssignmentList(el) {
         :a.dueDate?'<span style="font-size:12px;color:var(--text3);">Due: '+a.dueDate+'</span>':'';
       var nameHtml=isRenaming
         ?'<div style="display:flex;align-items:center;gap:6px;"><input class="form-input" id="rename-input-'+a.id+'" value="'+a.name.replace(/"/g,'&quot;')+'" style="font-size:14px;font-weight:600;padding:4px 8px;width:200px;" onkeydown="if(event.key===\'Enter\')saveRename('+a.id+');if(event.key===\'Escape\')cancelRename();"></div>'
-        :'<div class="bank-item-q" style="font-weight:600;">'+a.name+'</div>';
+        :'<div class="bank-item-q ao-asgn-name" style="font-weight:600;" onclick="toggleAoAsgn('+a.id+')" title="Click to show this assignment\'s questions">'
+          +'<span class="ao-caret'+(aoOpenAsgns[a.id]?' open':'')+'">&#9656;</span> '+a.name+'</div>';
+      // Questions listed under the assignment when its name is clicked (each one expands on click too).
+      var asgnQs=aoOpenAsgns[a.id]?questions.filter(function(q){ return (q.assignment||'General')===a.name; }):[];
+      var qListHtml=aoOpenAsgns[a.id]
+        ?'<div class="ao-asgn-qs">'+(asgnQs.length?asgnQs.map(function(q){ return bankItemHtml(q,''); }).join('')
+          :'<div style="font-size:13px;color:var(--text3);padding:4px 2px;">No questions yet — use Manage questions to add some.</div>')+'</div>'
+        :'';
       var actionsHtml;
       if(isMoveUnit){
         var moveOptHtml='<option value="">&#8212; None (no unit) &#8212;</option>';
@@ -2500,7 +2512,7 @@ function renderAssignmentList(el) {
            +'<button class="btn btn-danger btn-sm" onclick="deleteAssignment('+a.id+')">Delete</button>';
       }
       var canDrag=a.category==='ICE' && !isRenaming && !isEditingDue && !isMoveUnit;
-      return '<div class="bank-item" data-asgn-id="'+a.id+'">'
+      return '<div class="bank-item'+(aoOpenAsgns[a.id]?' ao-asgn-open':'')+'" data-asgn-id="'+a.id+'">'
         +(canDrag?'<span class="drag-handle" title="Drag to reorder" onpointerdown="startAsgnDrag(event)">&#8942;&#8942;</span>':'')
         +'<div class="bank-item-body">'
         +nameHtml
@@ -2509,7 +2521,8 @@ function renderAssignmentList(el) {
         +dueStr
         +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+visLabel+'</span>'
         +'</div></div>'
-        +'<div class="bank-actions">'+actionsHtml+'</div></div>';
+        +'<div class="bank-actions">'+actionsHtml+'</div>'
+        +qListHtml+'</div>';
     }
 
     // HW folder
@@ -2621,7 +2634,7 @@ function bankItemHtml(q, actionHtml) {
   var open=!!aoExpandedQs[q.id];
   return '<div class="bank-item ao-q'+(open?' open':'')+'" data-ao-q="'+q.id+'" style="margin-bottom:6px;">'
     +'<div class="bank-item-body" onclick="toggleAoQ('+q.id+')" title="Click to show the full question and answer">'
-    +'<div class="bank-item-q"><span class="ao-caret">&#9656;</span> '+q.text.replace(/<[^>]+>/g,'').substring(0,90)+'</div>'
+    +'<div class="bank-item-q"><span class="ao-caret">&#9656;</span> '+smartChem(q.text.replace(/<[^>]+>/g,'').substring(0,90))+'</div>'
     +'<div class="bank-item-meta" style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
     +'<span class="badge badge-'+q.type+'">'+tl[q.type]+'</span>'
     +(q.section?'<span style="font-size:11px;color:var(--text2);">'+q.section+'</span>':'')
@@ -2680,6 +2693,15 @@ function setNewAsgnCat(c) {
   if(ice) ice.className='type-tab'+(c==='ICE'?' active':'');
   var sg=document.getElementById('new-asgn-section-group');
   if(sg) sg.style.display=c==='ICE'?'':'none';
+}
+
+var aoOpenAsgns={};   // AO list: which assignments have their questions showing
+function toggleAoAsgn(id) {
+  var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
+  aoOpenAsgns[id]=!aoOpenAsgns[id];
+  // Its questions always start collapsed (titles only).
+  questions.forEach(function(q){ if((q.assignment||'General')===a.name) delete aoExpandedQs[q.id]; });
+  renderAssignments();
 }
 
 function toggleFolder(key) {

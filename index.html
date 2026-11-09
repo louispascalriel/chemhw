@@ -626,8 +626,20 @@ grant select on student_results to service_role;
               </div>
               <div class="form-group"><label class="form-label">Hint (optional)</label><input class="form-input" id="b-calc-hint" placeholder="Hint for students"></div>
             </div>
+            <div class="form-group" style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500;cursor:pointer;">
+                <input type="checkbox" id="b-as-ice" onchange="onBuilderIceToggle()" style="accent-color:var(--accent);width:16px;height:16px;"> Use as an ICE
+              </label>
+              <div id="b-ice-fields" style="display:none;margin-top:10px;">
+                <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                  <div style="flex:1;min-width:200px;"><label class="form-label">ICE name</label><input class="form-input" id="b-ice-name" placeholder="e.g. ICE 3.2 Ionic charges" list="b-ice-datalist" oninput="onBuilderIceNameInput()"><datalist id="b-ice-datalist"></datalist></div>
+                  <div style="flex:1;min-width:200px;" id="b-ice-unit-group"><label class="form-label">Unit <span style="font-weight:400;font-size:11px;text-transform:none;">(optional)</span></label><select class="form-input" id="b-ice-unit" onchange="document.getElementById('b-ice-unit-new').style.display=this.value==='__new__'?'':'none'"></select><input class="form-input" id="b-ice-unit-new" placeholder="New unit name" style="margin-top:6px;display:none;"></div>
+                </div>
+                <div id="b-ice-note" style="font-size:12px;color:var(--text3);margin-top:6px;">Creates a new ICE in AO (starts as Unused — click Open in AO when you're ready).</div>
+              </div>
+            </div>
             <div style="display:flex;align-items:center;gap:12px;margin-top:6px;">
-              <button class="btn btn-primary" style="width:auto;" onclick="addQuestion()">Add to question bank</button>
+              <button class="btn btn-primary" style="width:auto;" id="b-add-btn" onclick="addQuestion()">Add to question bank</button>
               <span id="b-note" style="font-size:13px;color:var(--text3);"></span>
             </div>
           </div>
@@ -2357,9 +2369,55 @@ function previewAns() {
 
 function showBNote(msg) { var n=document.getElementById('b-note'); n.textContent=msg; setTimeout(function(){ n.textContent=''; },2500); }
 
+// ── Question builder: "Use as an ICE" ──
+// Lets a one-question ICE be made straight from the builder: the question goes into a new ICE
+// (or an existing ICE if the name matches one) in the chosen unit.
+function onBuilderIceToggle() {
+  var on=document.getElementById('b-as-ice').checked;
+  document.getElementById('b-ice-fields').style.display=on?'':'none';
+  document.getElementById('b-add-btn').textContent=on?'Create question as ICE':'Add to question bank';
+  if (on) {
+    var units=[...new Set(assignments.filter(function(a){ return a.category==='ICE'&&a.courseSection; }).map(function(a){ return a.courseSection; }))].sort();
+    var sel=document.getElementById('b-ice-unit'), keep=sel.value;
+    sel.innerHTML='<option value="">— None (no unit) —</option>'
+      +units.map(function(u){ return '<option value="'+escHtml(u)+'">'+escHtml(u)+'</option>'; }).join('')
+      +'<option value="__new__">Enter new unit…</option>';
+    if (keep && (units.indexOf(keep)!==-1 || keep==='__new__')) sel.value=keep;
+    document.getElementById('b-ice-unit-new').style.display=sel.value==='__new__'?'':'none';
+    document.getElementById('b-ice-datalist').innerHTML=assignments.filter(function(a){ return a.category==='ICE'; })
+      .map(function(a){ return '<option value="'+escHtml(a.name)+'">'; }).join('');
+    onBuilderIceNameInput();
+  }
+}
+function onBuilderIceNameInput() {
+  var name=document.getElementById('b-ice-name').value.trim();
+  var a=assignments.find(function(x){ return x.name===name; });
+  var note=document.getElementById('b-ice-note'), unitGroup=document.getElementById('b-ice-unit-group');
+  if (a && a.category==='ICE') {
+    note.style.color='var(--text2)';
+    note.textContent='"'+name+'" already exists'+(a.courseSection?' (in '+a.courseSection+')':'')+' — this question will be added to it.';
+    unitGroup.style.opacity='0.4';
+  } else if (a) {
+    note.style.color='var(--red)'; note.textContent='"'+name+'" is a HW assignment — pick a different name.';
+    unitGroup.style.opacity='';
+  } else {
+    note.style.color='var(--text3)'; note.textContent='Creates a new ICE in AO (starts as Unused — click Open in AO when you\'re ready).';
+    unitGroup.style.opacity='';
+  }
+}
+
 function addQuestion() {
   var qtext=document.getElementById('b-qtext').value.trim();
   if (!qtext) { showBNote('Please enter a question.'); return; }
+  var asIce=document.getElementById('b-as-ice').checked, iceName='', iceAsgn=null, iceUnit='';
+  if (asIce) {
+    iceName=document.getElementById('b-ice-name').value.trim();
+    if (!iceName) { showBNote('Enter a name for the ICE.'); return; }
+    iceAsgn=assignments.find(function(x){ return x.name===iceName; })||null;
+    if (iceAsgn && iceAsgn.category!=='ICE') { showBNote('"'+iceName+'" is a HW assignment — pick a different ICE name.'); return; }
+    var unitSel=document.getElementById('b-ice-unit').value;
+    iceUnit=unitSel==='__new__'?document.getElementById('b-ice-unit-new').value.trim():unitSel;
+  }
   var kw=(document.getElementById('b-keywords').value.trim()||'').split(',').map(function(k){return k.trim().toLowerCase();}).filter(Boolean);
   var q={ id:nextId++, type:builderType, text:qtext, section:document.getElementById('b-section').value.trim(), keywords:kw, category:'HW', hidden:false };
   var imgEl=document.getElementById('b-img-preview');
@@ -2391,10 +2449,27 @@ function addQuestion() {
     q.tol=Math.max(0,(parseFloat(document.getElementById('b-calc-tol').value)||2)/100);
     q.hint=document.getElementById('b-calc-hint').value.trim();
   }
+  var doneMsg='Question added!';
+  if (asIce) {
+    if (!iceAsgn) {
+      iceAsgn={id:nextAssignmentId++, name:iceName, category:'ICE', courseSection:iceUnit, status:'unused', visible:false, dueDate:'', dueISO:''};
+      assignments.push(iceAsgn);
+      doneMsg='ICE "'+iceName+'" created'+(iceUnit?' in '+iceUnit:'')+' — open it in AO when you\'re ready.';
+    } else {
+      doneMsg='Question added to ICE "'+iceName+'".';
+    }
+    q.category='ICE'; q.assignment=iceName; q.hidden=!iceAsgn.visible;
+    saveAssignments();
+  }
   questions.push(q);
   saveQuestions();
-  resetBuilderForm(); showBNote('Question added!');
-  renderBank(); renderStudentQuestions();
+  resetBuilderForm(); showBNote(doneMsg);
+  if (asIce) {   // keep the box ticked and the same unit selected, for making several in a row
+    document.getElementById('b-ice-name').value=''; document.getElementById('b-ice-unit-new').value='';
+    onBuilderIceToggle();
+    document.getElementById('b-ice-unit').value=iceUnit; document.getElementById('b-ice-unit-new').style.display='none';
+  }
+  renderBank(); renderStudentQuestions(); renderAssignments();
 }
 
 function resetBuilderForm() {

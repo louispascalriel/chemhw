@@ -1406,6 +1406,7 @@ function smartChem(html) {
   if (!html) return '';
   return String(html).split(/(<[^>]*>)/).map(function(part){
     if (!part || part.charAt(0)==='<') return part;
+    part=part.replace(/(\S)\s*\^\s*(?=[\d+\-])/g, '$1^');        // "Na ^+" / "Na^ +" → "Na^+"
     return part.replace(/[A-Za-z0-9()\[\]^+\-]+/g, function(run){
       var out=chemFormulaHtml(run);
       if (out===null) {
@@ -1538,7 +1539,7 @@ function reviewCardHtml(q, i, mine, showMine) {
   var mineHtml='';
   if (showMine) {
     mineHtml=mine
-      ?'<div class="result-msg '+(mine.correct?'correct':'incorrect')+'" style="margin-bottom:8px;">'+(mine.correct?'✓':'✗')+' Your answer: <strong>'+(escHtml(mine.answer)||'—')+'</strong></div>'
+      ?'<div class="result-msg '+(mine.correct?'correct':'incorrect')+'" style="margin-bottom:8px;">'+(mine.correct?'✓':'✗')+' Your answer: <strong>'+(smartChem(escHtml(mine.answer))||'—')+'</strong></div>'
       :'<div class="result-msg" style="margin-bottom:8px;color:var(--text3);">You did not answer this question.</div>';
   }
   return '<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+Q_BADGE_CLASS[q.type]+'">'+Q_BADGE_NAME[q.type]+'</span></div></div>'
@@ -1953,7 +1954,7 @@ function buildDetailTable(qList, byQ) {
       var finalCorrect=attempts.some(function(r){ return r.correct; });
       var attHtml=attempts.map(function(r) {
         var icon=r.correct?'✓':'✗', color=r.correct?'var(--green)':'var(--red)';
-        var ans=r.student_answer?' <code style="font-family:\'DM Mono\',monospace;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:12px;">'+r.student_answer+'</code>':'';
+        var ans=r.student_answer?' <code style="font-family:\'DM Mono\',monospace;background:rgba(0,0,0,0.06);padding:1px 5px;border-radius:3px;font-size:12px;">'+smartChem(escHtml(r.student_answer))+'</code>':'';
         return '<span style="display:inline-flex;align-items:center;gap:3px;color:'+color+';margin-right:8px;white-space:nowrap;">'+icon+ans+'</span>';
       }).join('');
       var statusHtml=finalCorrect?'<span style="color:var(--green);font-weight:500;">Correct</span>':'<span style="color:var(--red);">Missed</span>';

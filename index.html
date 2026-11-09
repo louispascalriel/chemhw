@@ -1354,7 +1354,7 @@ function mergeAttemptLimits(saved) {
     }
   });
 }
-var usedAttempts={}, solved={};
+var usedAttempts={}, solved={}, myAnswers={};   // myAnswers[qid] = { answer, correct } for the Completed-exercises review
 var studentCategory='HW';
 var studentAssignment=null;
 
@@ -1373,7 +1373,7 @@ function normChem(s) { return s.replace(/\s/g,''); }
 // ══════════════════════════════════════════
 //  STUDENT VIEW
 // ══════════════════════════════════════════
-function resetStudentState() { usedAttempts={}; solved={}; }
+function resetStudentState() { usedAttempts={}; solved={}; myAnswers={}; }
 
 function showStudentCategory(cat, el) {
   studentCategory=cat;
@@ -1404,6 +1404,86 @@ function showAssignment(name) {
 function backToAssignments() {
   studentAssignment=null;
   renderStudentQuestions(); updateScore();
+}
+
+var Q_BADGE_CLASS={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
+var Q_BADGE_NAME={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
+function escHtml(s) { return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+function figHtmlFor(q) {
+  var figHtml='';
+  if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
+  if (q.tableData) {
+    figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
+    q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
+    figHtml+='</table></div>';
+  }
+  return figHtml;
+}
+
+// Read-only card body: the correct answer (used for past-due HW and for closed ICEs).
+function correctAnswerHtml(q) {
+  var answerHtml='';
+  if (q.type==='formula') {
+    answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+parseChem(q.answers[0])+'</span></div>';
+  } else if (q.type==='sci') {
+    var exp=Math.floor(Math.log10(Math.abs(q.correctVal)));
+    var coeff=(q.correctVal/Math.pow(10,exp)).toFixed(3);
+    answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+coeff+' × 10<sup>'+exp+'</sup></span></div>';
+  } else if (q.type==='calc') {
+    answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+q.correctVal+(q.unit?' '+q.unit:'')+'</span></div>';
+  } else if (q.type==='mc') {
+    var letters=['A','B','C','D','E','F'];
+    answerHtml='<div class="mc-options">';
+    (q.options||[]).forEach(function(opt,oi){
+      var isCorrect=oi===q.correct;
+      answerHtml+='<div class="mc-option '+(isCorrect?'correct-opt':'disabled')+'" style="cursor:default;">'
+        +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>';
+    });
+    answerHtml+='</div>';
+    if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+q.explanation+'</div>';
+  }
+  return answerHtml;
+}
+
+// Read-only question card. mine = { answer, correct } shows the student's own answer; null hides that line.
+function reviewCardHtml(q, i, mine, showMine) {
+  var mineHtml='';
+  if (showMine) {
+    mineHtml=mine
+      ?'<div class="result-msg '+(mine.correct?'correct':'incorrect')+'" style="margin-bottom:8px;">'+(mine.correct?'✓':'✗')+' Your answer: <strong>'+(escHtml(mine.answer)||'—')+'</strong></div>'
+      :'<div class="result-msg" style="margin-bottom:8px;color:var(--text3);">You did not answer this question.</div>';
+  }
+  return '<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+Q_BADGE_CLASS[q.type]+'">'+Q_BADGE_NAME[q.type]+'</span></div></div>'
+    +'<div class="q-text">'+q.text+'</div>'+figHtmlFor(q)+'<div>'+mineHtml+(q.hint?'<div class="hint">'+q.hint+'</div>':'')+correctAnswerHtml(q)+'</div>';
+}
+
+// Students: closed ICEs, newest first, each folded under its name, with their answer and the correct one.
+function appendIceReview(container) {
+  var closed=assignments.filter(function(a){ return a.category==='ICE' && asgnStatus(a)==='closed'; })
+    .sort(function(a,b){ return (b.closedAt||0)-(a.closedAt||0); });
+  var groups=closed.map(function(a){
+    return { a:a, qs:questions.filter(function(q){ return q.category==='ICE' && (q.assignment||'General')===a.name; }) };
+  }).filter(function(g){ return g.qs.length; });
+  if (!groups.length) return;
+  var head=document.createElement('div');
+  head.className='dash-section-title'; head.style.marginTop='1.5rem';
+  head.textContent='Completed exercises';
+  container.appendChild(head);
+  groups.forEach(function(g){
+    var right=g.qs.filter(function(q){ return solved[String(q.id)]; }).length;
+    var det=document.createElement('details');
+    det.className='card'; det.style.marginBottom='10px';
+    det.innerHTML='<summary style="cursor:pointer;font-weight:600;display:flex;justify-content:space-between;gap:8px;">'
+      +'<span>'+g.a.name+'</span><span style="font-weight:400;color:var(--text3);font-size:13px;">'+right+' / '+g.qs.length+' correct</span></summary>';
+    g.qs.forEach(function(q,i){
+      var card=document.createElement('div');
+      card.className='q-card'; card.style.marginTop='10px';
+      card.innerHTML=reviewCardHtml(q, i, myAnswers[q.id]||myAnswers[String(q.id)], true);
+      det.appendChild(card);
+    });
+    container.appendChild(det);
+  });
 }
 
 function renderStudentQuestions() {
@@ -1452,6 +1532,7 @@ function renderStudentQuestions() {
   if (!catQs.length) {
     container.innerHTML=(studentCategory==='HW'?'<div class="assignment-back"><button class="btn btn-secondary btn-sm" onclick="backToAssignments()">← Assignments</button></div>':'')
       +'<div class="empty">'+(studentCategory==='ICE'?'No ICE questions are available right now — check back during class.':'No questions in this assignment yet.')+'</div>';
+    if (studentCategory==='ICE') appendIceReview(container);
     return;
   }
   container.innerHTML='';
@@ -1475,38 +1556,10 @@ function renderStudentQuestions() {
     div.className='q-card'; div.id='qcard-'+q.id;
     var bl={formula:'badge-formula',sci:'badge-sci',mc:'badge-mc',calc:'badge-calc'};
     var bn={formula:'Formula',sci:'Sci. notation',mc:'Multiple choice',calc:'Calculation'};
-    var figHtml='';
-    if (q.image) figHtml='<div class="q-figure"><img src="'+q.image+'"><div class="fig-caption">'+(q.imageCaption||'')+'</div></div>';
-    if (q.tableData) {
-      figHtml+='<div style="overflow-x:auto;margin-bottom:1rem;"><table class="q-table">';
-      q.tableData.forEach(function(row,ri){ figHtml+='<tr>'; row.forEach(function(c){ figHtml+=ri===0?'<th>'+c+'</th>':'<td>'+c+'</td>'; }); figHtml+='</tr>'; });
-      figHtml+='</table></div>';
-    }
+    var figHtml=figHtmlFor(q);
     var body='';
     if (readOnly) {
-      var answerHtml='';
-      if (q.type==='formula') {
-        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+parseChem(q.answers[0])+'</span></div>';
-      } else if (q.type==='sci') {
-        var exp=Math.floor(Math.log10(Math.abs(q.correctVal)));
-        var coeff=(q.correctVal/Math.pow(10,exp)).toFixed(3);
-        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+coeff+' × 10<sup>'+exp+'</sup></span></div>';
-      } else if (q.type==='calc') {
-        answerHtml='<div class="answer-reveal">Correct answer: <span class="answer-reveal-val">'+q.correctVal+(q.unit?' '+q.unit:'')+'</span></div>';
-      } else if (q.type==='mc') {
-        var letters=['A','B','C','D','E','F'];
-        answerHtml='<div class="mc-options">';
-        (q.options||[]).forEach(function(opt,oi){
-          var isCorrect=oi===q.correct;
-          answerHtml+='<div class="mc-option '+(isCorrect?'correct-opt':'disabled')+'" style="cursor:default;">'
-            +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>';
-        });
-        answerHtml+='</div>';
-        if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+q.explanation+'</div>';
-      }
-      body=(q.hint?'<div class="hint">'+q.hint+'</div>':'')+answerHtml;
-      div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div></div>'
-        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>';
+      div.innerHTML=reviewCardHtml(q, i, null, false);
     } else {
       if (q.type==='formula') {
         body='<input class="student-input" id="si-'+q.id+'" placeholder="Type formula…" oninput="document.getElementById(\'sp-'+q.id+'\').innerHTML=parseChem(this.value)" autocomplete="off" spellcheck="false">'
@@ -1537,6 +1590,7 @@ function renderStudentQuestions() {
     container.appendChild(div);
     if (!readOnly) { updateAttemptUI(q.id); restoreAnsweredState(q); }   // must run after the card is in the page
   });
+  if (studentCategory==='ICE') appendIceReview(container);
 }
 
 // When a student returns to a question they already finished (reload, other device, back to the
@@ -1549,7 +1603,7 @@ function restoreAnsweredState(q) {
     if (q.type==='mc') markMCSolved(q);
     lockQ(qid, true);
   } else if (!UNLIMITED && (usedAttempts[qid]||0)>=MAX) {
-    el.className='result-msg exhausted'; el.innerHTML='No attempts remaining. The correct answer was: <strong>'+correctDisplayFor(q)+'</strong>';
+    el.className='result-msg exhausted'; el.innerHTML=exhaustedHtml(q, correctDisplayFor(q));
     lockQ(qid);
   }
 }
@@ -1597,14 +1651,14 @@ function checkSci(qid,correctVal) {
   handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal.toExponential(3),c+'×10^'+e);
 }
 
-function checkMC(qid) {
+async function checkMC(qid) {
   if (solved[qid]||(!UNLIMITED&&(usedAttempts[qid]||0)>=MAX)) return;
   var q=questions.find(function(x){ return x.id===qid; });
   if (q._sel===undefined) { var el=document.getElementById('res-'+qid); el.className='result-msg partial'; el.innerHTML='Please select an answer.'; return; }
   var ok=q._sel===q.correct;
   var letters=['A','B','C','D','E','F'];
   var selectedAnswer=letters[q._sel]+': '+q.options[q._sel];
-  handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct],selectedAnswer);
+  if (!(await handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct],selectedAnswer))) return;
   if (ok) {
     markMCSolved(q);
   } else {
@@ -1622,10 +1676,46 @@ function checkCalc(qid,correctVal) {
   handleResult(qid,diff<=tol,diff<=tol?'Correct! Within '+(tol*100).toFixed(1)+'% tolerance.':null,correctVal+(q.unit?' '+q.unit:''),v+(q.unit?' '+q.unit:''));
 }
 
-function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
+// What a student sees once a question is out of attempts. ICE answers stay secret while the
+// exercise is open (neighbours can see screens); they appear under "Completed exercises" once closed.
+function exhaustedHtml(q, correctDisplay) {
+  if (q && (q.category||'HW')==='ICE') return '✗ Incorrect. The answer will be shown under <strong>Completed exercises</strong> once your instructor closes this exercise.';
+  return 'No attempts remaining. The correct answer was: <strong>'+correctDisplay+'</strong>';
+}
+
+var submittingQ={};
+// Saves the answer first, then shows feedback. Returns true if the answer counted.
+async function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
+  if (submittingQ[qid]) return false;
+  submittingQ[qid]=true;
+  var el=document.getElementById('res-'+qid), btn=document.getElementById('sbtn-'+qid);
+  var q=questions.find(function(x){ return x.id===qid; });
+  if (btn) btn.disabled=true;
+  el.className='result-msg'; el.innerHTML='Checking…';
+  var save;
+  try { save=await saveResult(qid, ok, (usedAttempts[qid]||0)+1, studentAnswer) || {}; }
+  finally { submittingQ[qid]=false; if (btn) btn.disabled=false; }
+
+  if (save.rejected) {
+    // The database refused it — usually because this question was already answered in another window or device.
+    await loadStudentProgress();
+    if (save.rejected==='closed') {
+      el.className='result-msg exhausted'; el.innerHTML='This exercise has been closed by your instructor.';
+      lockQ(qid);
+    } else if (save.rejected==='already solved' || save.rejected==='no attempts left') {
+      if (save.rejected==='no attempts left') usedAttempts[qid]=Math.max(usedAttempts[qid]||0, MAX);
+      restoreAnsweredState(q);
+      lockQ(qid, !!solved[qid]);
+      el.innerHTML='You already answered this question (in another window or device). '+el.innerHTML;
+    } else {
+      el.className='result-msg exhausted'; el.innerHTML='This question is no longer available.';
+      lockQ(qid);
+    }
+    updateAttemptUI(qid); updateScore();
+    return false;
+  }
+
   usedAttempts[qid]=(usedAttempts[qid]||0)+1;
-  var el=document.getElementById('res-'+qid);
-  saveResult(qid, ok, usedAttempts[qid], studentAnswer);
   if (ok) {
     solved[qid]=true;
     el.className='result-msg correct'; el.innerHTML='✓ '+(successMsg||'Correct!');
@@ -1633,16 +1723,18 @@ function handleResult(qid, ok, successMsg, correctDisplay, studentAnswer) {
   } else {
     var rem=UNLIMITED?Infinity:MAX-(usedAttempts[qid]||0);
     if (!UNLIMITED&&rem<=0) {
-      el.className='result-msg exhausted'; el.innerHTML='No attempts remaining. The correct answer was: <strong>'+correctDisplay+'</strong>';
+      el.className='result-msg exhausted'; el.innerHTML=exhaustedHtml(q, correctDisplay);
       lockQ(qid);
     } else {
       el.className='result-msg incorrect';
       el.innerHTML=UNLIMITED?'Not quite — try again.':'Not quite — '+rem+' attempt'+(rem===1?'':'s')+' remaining.';
     }
   }
+  if (save.failed) el.insertAdjacentHTML('beforeend','<div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Could not save ('+save.failed+') — your answer may not appear for the teacher.</div>');
   updateAttemptUI(qid); updateScore();
   // Make sure the feedback is on screen (it sits below the options; on phones the tab bar can cover it).
   if (el && el.scrollIntoView) { try { el.scrollIntoView({ block:'nearest', behavior:'smooth' }); } catch(e){ el.scrollIntoView(false); } }
+  return true;
 }
 
 function lockQ(qid, isSolved) {
@@ -1711,8 +1803,10 @@ async function loadStudentProgress() {
   });
   Object.keys(byQ).forEach(function(qid) {
     var attempts = byQ[qid];
-    usedAttempts[qid] = Math.max.apply(null, attempts.map(function(r){ return r.attempts_used||1; }));
+    usedAttempts[qid] = Math.max(attempts.length, Math.max.apply(null, attempts.map(function(r){ return r.attempts_used||1; })));
     if (attempts.some(function(r){ return r.correct; })) solved[qid] = true;
+    var last = attempts.filter(function(r){ return r.correct; })[0] || attempts[attempts.length-1];
+    myAnswers[qid] = { answer: last.student_answer||'', correct: !!last.correct };
   });
 }
 
@@ -1732,16 +1826,20 @@ async function saveResult(qid, correct, attemptsUsed, studentAnswer) {
     student_answer: String(studentAnswer||'')
   };
   var result = await sbInsert('student_results', row);
-  if (result.error) {
-    delete row.student_answer;
-    var retry = await sbInsert('student_results', row);
-    if (retry.error) {
-      console.error('ChemHW: failed to save result for Q'+qid, retry.error);
-      var errCode = retry.error.code || retry.error.message || JSON.stringify(retry.error);
-      var warn = document.getElementById('res-'+qid);
-      if (warn) warn.insertAdjacentHTML('beforeend','<div style="font-size:11px;color:var(--red);margin-top:4px;">⚠ Could not save ('+errCode+') — your answer may not appear for the teacher.</div>');
-    }
+  // The database refused it (no attempts left, already solved, closed) — see supabase/2026-11-09_server_attempt_limits.sql.
+  if (result.error && /CHEMHW:/.test(result.error.message||'')) {
+    return { rejected: (result.error.message.match(/CHEMHW:\s*(.*)/)||[])[1] || 'rejected' };
   }
+  if (result.error && /student_answer/.test(result.error.message||'')) {
+    delete row.student_answer;   // very old database without the student_answer column
+    result = await sbInsert('student_results', row);
+  }
+  if (result.error) {
+    console.error('ChemHW: failed to save result for Q'+qid, result.error);
+    return { failed: result.error.code || result.error.message || JSON.stringify(result.error) };
+  }
+  myAnswers[qid] = { answer: String(studentAnswer||''), correct: correct };
+  return {};
 }
 
 // ══════════════════════════════════════════
@@ -2549,6 +2647,7 @@ function asgnStatus(a) { return a.status || (a.visible ? 'open' : 'unused'); }
 function setAsgnStatus(id, status) {
   var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
   a.status=status; a.visible=(status==='open');
+  if (status==='closed') a.closedAt=Date.now();   // students' Completed exercises list is newest first
   questions.forEach(function(q){ if((q.assignment||'General')===a.name) q.hidden=!a.visible; });
   saveAssignments(); saveQuestions();
   renderAssignments(); renderStudentQuestions(); updateScore();

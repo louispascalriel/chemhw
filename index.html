@@ -1802,8 +1802,23 @@ async function loadDashboard() {
   ctrlEl.style.display='flex';
 
   var hwThreshold = parseInt(document.getElementById('hw-threshold').value)||70;
-  var hwQs = questions.filter(function(q){ return (q.category||'HW')==='HW' && !q.hidden; });
-  var iceQs = questions.filter(function(q){ return q.category==='ICE' && !q.hidden; });
+  // HW and ICE results show for Open and Completed & Closed assignments. A hidden question that
+  // students already answered also shows (covers assignments hidden before the statuses existed).
+  var answeredIds = {}; results.forEach(function(r){ answeredIds[r.question_id]=true; });
+  var asgnByName = {}; assignments.forEach(function(a){ asgnByName[a.name]=a; });
+  var migrated = false;
+  assignments.forEach(function(a){
+    if (a.status || a.visible) return;
+    var used = questions.some(function(q){ return (q.assignment||'General')===a.name && answeredIds[q.id]; });
+    if (used) { a.status='closed'; migrated=true; }
+  });
+  if (migrated) saveAssignments();
+  function inResults(q) {
+    var a = asgnByName[q.assignment||'General'];
+    return !q.hidden || answeredIds[q.id] || (a && asgnStatus(a)==='closed');
+  }
+  var hwQs = questions.filter(function(q){ return (q.category||'HW')==='HW' && inResults(q); });
+  var iceQs = questions.filter(function(q){ return q.category==='ICE' && inResults(q); });
   var hwQIds = hwQs.map(function(q){ return q.id; });
   var iceQIds = iceQs.map(function(q){ return q.id; });
 
@@ -2250,7 +2265,10 @@ function renderAssignmentList(el) {
     // Helper: render a single assignment row
     function asgnItemHtml(a) {
       var qCount=questions.filter(function(q){ return (q.assignment||'General')===a.name; }).length;
-      var visColor=a.visible?'var(--green)':'var(--text3)';
+      var st=asgnStatus(a);
+      var visColor=st==='open'?'var(--green)':st==='closed'?'var(--accent)':'var(--text3)';
+      var visLabel=st==='open'?'Open':st==='closed'?'Completed &amp; Closed':'Unused';
+      var visBtn='<button class="btn btn-secondary btn-sm" onclick="setAsgnStatus('+a.id+',\''+(st==='open'?'closed':'open')+'\')">'+(st==='open'?'Close':st==='closed'?'Reopen':'Open')+'</button>';
       var isRenaming=renamingAssignmentId===a.id;
       var isEditingDue=editingDueDateId===a.id;
       var isMoveUnit=movingUnitId===a.id;
@@ -2286,7 +2304,7 @@ function renderAssignmentList(el) {
           :isEditingDue
           ?'<button class="btn btn-primary btn-sm" onclick="saveEditDue('+a.id+')">Save</button>'
            +'<button class="btn btn-secondary btn-sm" onclick="cancelEditDue()">Cancel</button>'
-          :'<button class="btn btn-secondary btn-sm" onclick="toggleAssignmentVisible('+a.id+')">'+(a.visible?'Hide':'Show')+'</button>'
+          :visBtn
            +'<button class="btn btn-secondary btn-sm" onclick="startRename('+a.id+')">Rename</button>'
            +'<button class="btn btn-secondary btn-sm" onclick="startEditDue('+a.id+')">Edit due date</button>'
            +(a.category==='ICE'?'<button class="btn btn-secondary btn-sm" onclick="startMoveUnit('+a.id+')">Move to Unit</button>':'')
@@ -2298,7 +2316,7 @@ function renderAssignmentList(el) {
         +'<div class="bank-item-meta" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;">'
         +'<span style="font-size:12px;color:var(--text2);">'+qCount+' question'+(qCount!==1?'s':'')+'</span>'
         +dueStr
-        +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+(a.visible?'Visible to students':'Hidden from students')+'</span>'
+        +'<span style="font-size:12px;color:'+visColor+';font-weight:500;">● '+visLabel+'</span>'
         +'</div></div>'
         +'<div class="bank-actions">'+actionsHtml+'</div></div>';
     }
@@ -2384,7 +2402,7 @@ function renderAssignmentList(el) {
 function adoptAssignment(name) {
   var groupQs=questions.filter(function(q){ return (q.assignment||'General')===name; });
   var cat=groupQs.length?(groupQs[0].category||'HW'):'HW';
-  assignments.push({id:nextAssignmentId++,name:name,category:cat,visible:true,dueDate:'',dueISO:''});
+  assignments.push({id:nextAssignmentId++,name:name,category:cat,visible:true,status:'open',dueDate:'',dueISO:''});
   saveAssignments();
   renderAssignments();
 }
@@ -2482,10 +2500,11 @@ function executeMoveUnit(id, action) {
   } else if(action==='copy'){
     var baseName=a.name, newName=baseName, suffix=2;
     while(assignments.some(function(x){ return x.name===newName; })){ newName=baseName+' ('+suffix+')'; suffix++; }
-    var newA={id:nextAssignmentId++, name:newName, category:'ICE', courseSection:targetUnit, visible:a.visible, dueDate:a.dueDate, dueISO:a.dueISO};
+    // A copy is a fresh ICE (new question ids, no answers yet), so it starts Unused.
+    var newA={id:nextAssignmentId++, name:newName, category:'ICE', courseSection:targetUnit, status:'unused', visible:false, dueDate:a.dueDate, dueISO:a.dueISO};
     assignments.push(newA);
     var srcQs=questions.filter(function(q){ return (q.assignment||'General')===a.name; });
-    srcQs.forEach(function(q){ var copy=JSON.parse(JSON.stringify(q)); copy.id=nextId++; copy.assignment=newName; questions.push(copy); });
+    srcQs.forEach(function(q){ var copy=JSON.parse(JSON.stringify(q)); copy.id=nextId++; copy.assignment=newName; copy.hidden=true; questions.push(copy); });
     movingUnitId=null;
     saveAssignments(); saveQuestions(); renderAssignments(); renderBank(); renderStudentQuestions();
   }
@@ -2511,7 +2530,7 @@ function createAssignment() {
   var dueISO=due?(due+'T'+time):'';
   var courseSection='';
   if(newAsgnCategory==='ICE'){ var _sel=document.getElementById('new-asgn-unit-select'); if(_sel){ courseSection=_sel.value==='__new__'?((document.getElementById('new-asgn-unit-input')||{}).value||'').trim():_sel.value; } }
-  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, courseSection:courseSection, visible:false, dueDate:dueDateTime, dueISO:dueISO});
+  assignments.push({id:nextAssignmentId++, name:name, category:newAsgnCategory, courseSection:courseSection, visible:false, status:'unused', dueDate:dueDateTime, dueISO:dueISO});
   saveAssignments();
   document.getElementById('new-asgn-name').value='';
   document.getElementById('new-asgn-due').value='';
@@ -2522,9 +2541,14 @@ function createAssignment() {
   renderAssignments();
 }
 
-function toggleAssignmentVisible(id) {
+// Assignment lifecycle (HW and ICE): 'unused' (never opened) -> 'open' (students can answer)
+// -> 'closed' (completed; still in results). Older assignments have no status, so derive one
+// from the old visible flag.
+function asgnStatus(a) { return a.status || (a.visible ? 'open' : 'unused'); }
+
+function setAsgnStatus(id, status) {
   var a=assignments.find(function(x){ return x.id===id; }); if(!a) return;
-  a.visible=!a.visible;
+  a.status=status; a.visible=(status==='open');
   questions.forEach(function(q){ if((q.assignment||'General')===a.name) q.hidden=!a.visible; });
   saveAssignments(); saveQuestions();
   renderAssignments(); renderStudentQuestions(); updateScore();

@@ -1374,8 +1374,15 @@ function parseChem(raw) {
   if (!raw) return '<span style="color:var(--text3);font-size:13px;">preview</span>';
   var s = raw;
   s = s.replace(/\^([+\-]?\d+[+\-]?|[+\-]+)/g, function(_,x){ return '<sup>'+x+'</sup>'; });
+  // A lone + or - at the end of a formula is a charge: Na+ → Na⁺, NH4+ → NH₄⁺, Cl- → Cl⁻ (use ^ for 2+, 3- …).
+  s = s.replace(/([A-Za-z0-9\)\]])([+\-])(?=$|[\s,;:)\]])/g, function(_,a,b){ return a+'<sup>'+b+'</sup>'; });
   s = s.replace(/([A-Za-z\)\]])(\d+)/g, function(_,a,b){ return a+'<sub>'+b+'</sub>'; });
   return s;
+}
+// Chemistry formatting for MC options: same rules as parseChem, but empty stays empty.
+function fmtChem(s) { return s ? parseChem(String(s)) : ''; }
+function mcOptPreviewHtml(v) {
+  return v ? '<span style="font-size:11px;color:var(--text3);">Students see:</span> <span style="font-size:15px;">'+fmtChem(v)+'</span>' : '';
 }
 function normChem(s) { return s.replace(/\s/g,''); }
 
@@ -1467,7 +1474,7 @@ function correctAnswerHtml(q) {
     (q.options||[]).forEach(function(opt,oi){
       var isCorrect=oi===q.correct;
       answerHtml+='<div class="mc-option '+(isCorrect?'correct-opt':'disabled')+'" style="cursor:default;">'
-        +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>';
+        +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+fmtChem(opt)+'</span></div>';
     });
     answerHtml+='</div>';
     if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+q.explanation+'</div>';
@@ -1602,7 +1609,7 @@ function renderStudentQuestions() {
       } else if (q.type==='mc') {
         body='<div class="mc-options" id="mcopts-'+q.id+'">';
         var letters=['A','B','C','D','E','F'];
-        (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+opt+'</span></div>'; });
+        (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+fmtChem(opt)+'</span></div>'; });
         body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
         if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
       } else if (q.type==='calc') {
@@ -1640,7 +1647,7 @@ function correctDisplayFor(q) {
   var letters=['A','B','C','D','E','F'];
   if (q.type==='formula') return parseChem((q.answers||[])[0]||'');
   if (q.type==='sci') return Number(q.correctVal).toExponential(3);
-  if (q.type==='mc') return 'option '+letters[q.correct]+' — '+(q.options||[])[q.correct];
+  if (q.type==='mc') return 'option '+letters[q.correct]+' — '+fmtChem((q.options||[])[q.correct]);
   if (q.type==='calc') return q.correctVal+(q.unit?' '+q.unit:'');
   return '';
 }
@@ -1687,7 +1694,7 @@ async function checkMC(qid) {
   var ok=q._sel===q.correct;
   var letters=['A','B','C','D','E','F'];
   var selectedAnswer=letters[q._sel]+': '+q.options[q._sel];
-  if (!(await handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+q.options[q.correct],selectedAnswer))) return;
+  if (!(await handleResult(qid,ok,ok?'Correct! Option '+letters[q.correct]+' is right.':null,'option '+letters[q.correct]+' — '+fmtChem(q.options[q.correct]),selectedAnswer))) return;
   if (ok) {
     markMCSolved(q);
   } else {
@@ -2250,10 +2257,11 @@ function setBuilderType(t) {
 
 function addMCOpt() {
   var i=mcOptCount++;
-  var div=document.createElement('div');
-  div.className='mc-builder-option'; div.id='mcbopt-'+i;
-  div.innerHTML='<input type="radio" name="mc-correct" value="'+i+'" style="accent-color:var(--accent);"> <span style="font-size:12px;color:var(--text2);white-space:nowrap;">Correct</span> <input type="text" class="form-input" id="mcbt-'+i+'" placeholder="Option '+(i+1)+'" style="font-size:14px;"> <button class="btn btn-danger btn-sm btn-xs" onclick="document.getElementById(\'mcbopt-'+i+'\').remove()" style="padding:4px 8px;">✕</button>';
-  document.getElementById('mc-options-builder').appendChild(div);
+  var wrap=document.createElement('div');
+  wrap.id='mcbopt-'+i;
+  wrap.innerHTML='<div class="mc-builder-option"><input type="radio" name="mc-correct" value="'+i+'" style="accent-color:var(--accent);"> <span style="font-size:12px;color:var(--text2);white-space:nowrap;">Correct</span> <input type="text" class="form-input" id="mcbt-'+i+'" placeholder="Option '+(i+1)+' (e.g. H2O, Na+, SO4^2-)" oninput="document.getElementById(\'mcbp-'+i+'\').innerHTML=mcOptPreviewHtml(this.value)" style="font-size:14px;"> <button class="btn btn-danger btn-sm btn-xs" onclick="document.getElementById(\'mcbopt-'+i+'\').remove()" style="padding:4px 8px;">✕</button></div>'
+    +'<div id="mcbp-'+i+'" style="margin:-2px 0 8px 28px;"></div>';
+  document.getElementById('mc-options-builder').appendChild(wrap);
 }
 
 function handleImageUpload(e) {
@@ -3008,9 +3016,12 @@ function renderEditMCOptions() {
     var div=document.createElement('div');
     div.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
     div.innerHTML='<input type="radio" name="eq-mc-correct" value="'+i+'" style="accent-color:var(--accent);"'+(editMCCorrect===i?' checked':'')+' onchange="editMCCorrect='+i+'">'
-      +'<input class="form-input" value="'+opt.replace(/"/g,'&quot;')+'" oninput="editMCOptions['+i+']=this.value" style="flex:1;font-size:13px;">'
+      +'<input class="form-input" value="'+opt.replace(/"/g,'&quot;')+'" oninput="editMCOptions['+i+']=this.value;document.getElementById(\'eqmcp-'+i+'\').innerHTML=mcOptPreviewHtml(this.value)" style="flex:1;font-size:13px;">'
       +(editMCOptions.length>2?'<button class="btn btn-danger btn-sm" style="padding:4px 8px;" onclick="removeEditMCOpt('+i+')">✕</button>':'');
     el.appendChild(div);
+    var pv=document.createElement('div');
+    pv.id='eqmcp-'+i; pv.style.cssText='margin:-2px 0 8px 24px;'; pv.innerHTML=mcOptPreviewHtml(opt);
+    el.appendChild(pv);
   });
   if(editMCOptions.length<5){
     var addBtn=document.createElement('button');

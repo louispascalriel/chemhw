@@ -1379,8 +1379,59 @@ function parseChem(raw) {
   s = s.replace(/([A-Za-z\)\]])(\d+)/g, function(_,a,b){ return a+'<sub>'+b+'</sub>'; });
   return s;
 }
-// Chemistry formatting for MC options: same rules as parseChem, but empty stays empty.
-function fmtChem(s) { return s ? parseChem(String(s)) : ''; }
+// ── Smart chemistry formatting for question text, explanations and MC options ──
+// Only words that look like formulas change: built from real element symbols, with a number, a charge or ^.
+// So "H2O", "Ca(OH)2", "NH4+", "SO4^2-", "Fe3+", "2H2O(l)" are formatted; "Question 2", "pH 7", "Q2", "C-14" are not.
+// ^ with a number anywhere is a superscript too ("10^23", "cm^3", "1s^2"). HTML tags are never touched.
+var CHEM_ELEMENTS=('H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr '
+  +'Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re '
+  +'Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og').split(' ');
+function chemFormulaHtml(tok) {
+  var m=tok.match(/^(\d*)(.*?)(\((?:s|l|g|aq)\))?$/);           // coefficient, formula, state symbol
+  var coef=m[1], rest=m[2], state=m[3]||'', charge='';
+  if (!rest) return null;
+  var c;
+  if ((c=rest.match(/\^(\d*[+\-]|[+\-]\d*)$/))) { charge=c[1]; rest=rest.slice(0,-c[0].length); }
+  else if ((c=rest.match(/^([A-Z][a-z]?)(\d+[+\-])$/))) { rest=c[1]; charge=c[2]; }   // single-element ion: Fe3+, O2-
+  else if ((c=rest.match(/[+\-]$/))) { charge=c[0]; rest=rest.slice(0,-1); }
+  if (!/^(?:[A-Z][a-z]?\d*|[(\[]|[)\]]\d*)+$/.test(rest)) return null;
+  if (!(rest.match(/[A-Z][a-z]?/g)||[]).every(function(e){ return CHEM_ELEMENTS.indexOf(e)!==-1; })) return null;
+  var depth=0;
+  for (var i=0;i<rest.length;i++){ var ch=rest[i]; if(ch==='('||ch==='[') depth++; else if(ch===')'||ch===']'){ if(--depth<0) return null; } }
+  if (depth!==0) return null;
+  if (!/\d/.test(rest) && !charge) return null;                     // "CO", "NaCl": nothing to format
+  return coef+rest.replace(/([A-Za-z\)\]])(\d+)/g, '$1<sub>$2</sub>')+(charge?'<sup>'+charge+'</sup>':'')+state;
+}
+function smartChem(html) {
+  if (!html) return '';
+  return String(html).split(/(<[^>]*>)/).map(function(part){
+    if (!part || part.charAt(0)==='<') return part;
+    return part.replace(/[A-Za-z0-9()\[\]^+\-]+/g, function(run){
+      var out=chemFormulaHtml(run);
+      if (out===null) {
+        var w=run.match(/^([(\[]?)(.*?)([)\]]?)$/);                 // "(Na+)" → try "Na+" inside the brackets
+        if (w && (w[1]||w[3])) { var inner=chemFormulaHtml(w[2]); if (inner!==null) out=w[1]+inner+w[3]; }
+      }
+      if (out===null) out=run.replace(/\^(-?\d+)/g, '<sup>$1</sup>');   // 10^23, cm^3, 1s^2
+      return out;
+    });
+  }).join('');
+}
+// MC options use the same smart rules.
+function fmtChem(s) { return smartChem(s); }
+// "Students see:" preview under a question-text / explanation box in the builder and Edit window.
+function attachChemPreview(id) {
+  var el=document.getElementById(id); if (!el || el._chemPreview) return;
+  var pv=document.createElement('div');
+  pv.className='chem-preview'; pv.style.cssText='margin-top:4px;font-size:14px;line-height:1.5;';
+  el.insertAdjacentElement('afterend', pv);
+  el._chemPreview=function(){ pv.innerHTML=el.value.trim()?'<span style="font-size:11px;color:var(--text3);">Students see:</span> '+smartChem(el.value):''; };
+  el.addEventListener('input', el._chemPreview);
+}
+function refreshChemPreviews() {
+  ['b-qtext','b-mc-explain','eq-text','eq-mc-explain'].forEach(function(id){ attachChemPreview(id); var el=document.getElementById(id); if(el&&el._chemPreview) el._chemPreview(); });
+}
+document.addEventListener('DOMContentLoaded', refreshChemPreviews);
 function mcOptPreviewHtml(v) {
   return v ? '<span style="font-size:11px;color:var(--text3);">Students see:</span> <span style="font-size:15px;">'+fmtChem(v)+'</span>' : '';
 }
@@ -1477,7 +1528,7 @@ function correctAnswerHtml(q) {
         +'<div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+fmtChem(opt)+'</span></div>';
     });
     answerHtml+='</div>';
-    if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+q.explanation+'</div>';
+    if (q.explanation) answerHtml+='<div class="result-msg correct" style="margin-top:8px;">'+smartChem(q.explanation)+'</div>';
   }
   return answerHtml;
 }
@@ -1491,7 +1542,7 @@ function reviewCardHtml(q, i, mine, showMine) {
       :'<div class="result-msg" style="margin-bottom:8px;color:var(--text3);">You did not answer this question.</div>';
   }
   return '<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+Q_BADGE_CLASS[q.type]+'">'+Q_BADGE_NAME[q.type]+'</span></div></div>'
-    +'<div class="q-text">'+q.text+'</div>'+figHtmlFor(q)+'<div>'+mineHtml+(q.hint?'<div class="hint">'+q.hint+'</div>':'')+correctAnswerHtml(q)+'</div>';
+    +'<div class="q-text">'+smartChem(q.text)+'</div>'+figHtmlFor(q)+'<div>'+mineHtml+(q.hint?'<div class="hint">'+q.hint+'</div>':'')+correctAnswerHtml(q)+'</div>';
 }
 
 // Students: closed ICEs, newest first, each folded under its name, with their answer and the correct one.
@@ -1611,14 +1662,14 @@ function renderStudentQuestions() {
         var letters=['A','B','C','D','E','F'];
         (q.options||[]).forEach(function(opt,oi){ body+='<div class="mc-option" id="mcopt-'+q.id+'-'+oi+'" onclick="selectMC('+q.id+','+oi+')"><div class="mc-letter">'+letters[oi]+'</div><span style="font-size:14px;">'+fmtChem(opt)+'</span></div>'; });
         body+='</div><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkMC('+q.id+')" style="width:auto;">Check answer</button>';
-        if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+q.explanation+'</div>';
+        if (q.explanation) body+='<div id="mc-exp-'+q.id+'" style="display:none;" class="result-msg correct">'+smartChem(q.explanation)+'</div>';
       } else if (q.type==='calc') {
         body='<div class="sci-group"><input class="sci-input" id="scalc-'+q.id+'" type="number" step="any" placeholder="answer" style="width:130px;">'+(q.unit?'<span class="sci-sep">'+q.unit+'</span>':'')+'</div>'
             +(q.hint?'<div class="hint">'+q.hint+'</div>':'')
             +'<div style="margin-top:10px;"><button class="btn btn-primary" id="sbtn-'+q.id+'" onclick="checkCalc('+q.id+','+q.correctVal+')" style="width:auto;">Check answer</button></div>';
       }
       div.innerHTML='<div class="q-top"><div><span class="q-num">Q'+(i+1)+'</span> <span class="badge '+bl[q.type]+'">'+bn[q.type]+'</span></div><span class="attempt-status ok" id="astat-'+q.id+'"></span></div>'
-        +'<div class="q-text">'+q.text+'</div>'+figHtml+'<div>'+body+'</div>'
+        +'<div class="q-text">'+smartChem(q.text)+'</div>'+figHtml+'<div>'+body+'</div>'
         +'<div class="prog-track"><div class="prog-fill" id="prog-'+q.id+'" style="width:100%;"></div></div>'
         +'<div class="result-msg" id="res-'+q.id+'"></div>';
       updateAttemptUI(q.id);
@@ -2342,6 +2393,7 @@ function addQuestion() {
 
 function resetBuilderForm() {
   ['b-qtext','b-section','b-keywords','b-formula-ans','b-formula-hint','b-sci-hint','b-mc-explain','b-calc-unit','b-img-caption'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  refreshChemPreviews();
   ['b-sci-coeff','b-sci-exp','b-calc-val'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
   document.getElementById('b-sci-tol').value='1'; document.getElementById('b-calc-tol').value='2';
   document.getElementById('b-formula-preview').innerHTML='';
@@ -2560,7 +2612,7 @@ function aoDetailHtml(q) {
     extra='<div style="font-size:12px;color:var(--text2);margin-top:6px;">Also accepted: '+q.answers.slice(1).map(function(x){ return parseChem(x); }).join(', ')+'</div>';
   if ((q.type==='sci'||q.type==='calc') && q.tol!=null)
     extra+='<div style="font-size:12px;color:var(--text2);margin-top:6px;">Tolerance: ±'+(q.tol*100).toFixed(1)+'%</div>';
-  return '<div class="q-text" style="margin-top:8px;">'+q.text+'</div>'+figHtmlFor(q)
+  return '<div class="q-text" style="margin-top:8px;">'+smartChem(q.text)+'</div>'+figHtmlFor(q)
     +(q.hint?'<div class="hint">'+q.hint+'</div>':'')+correctAnswerHtml(q)+extra;
 }
 function bankItemHtml(q, actionHtml) {
@@ -3009,6 +3061,7 @@ function openEditModal(qid) {
     document.getElementById('eq-calc-fields').style.display='';
   }
   document.getElementById('edit-modal').classList.add('open');
+  refreshChemPreviews();
 }
 function renderEditMCOptions() {
   var el=document.getElementById('eq-mc-options'); el.innerHTML='';
